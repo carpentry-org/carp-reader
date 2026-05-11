@@ -1,0 +1,24 @@
+(load "carp-reader.carp")
+
+(Project.config "title" "carp-reader")
+(Project.config "docs-directory" "./docs/")
+(Project.config "docs-logo" "")
+(Project.config "docs-url" "https://github.com/carpentry-org/carp-reader")
+(Project.config "docs-styling" "../style.css")
+(Project.config "docs-prelude" "parses Carp source code.
+
+```
+(load \"git@github.com:carpentry-org/carp-reader@0.1.0\")
+
+(match (Reader.parse \"(defn hello [] (println \\\"hi\\\"))\")
+  (Result.Success forms) (for [i 0 (Array.length &forms)]
+                           (println &(Form.str (Box.peek (Array.unsafe-nth &forms i)))))
+  (Result.Error e)       (IO.errorln &(Parser.format-error &e)))
+```
+
+### Modules
+- [`Form`](./Form.html) is the AST sumtype and its pretty-printer.
+- [`Reader`](./Reader.html) are the `parse` / `parse-form` entry points.")
+
+(save-docs Form Reader)
+(defn main [] (System.system "mv ./docs/carp-reader_index.html ./docs/index.html"))
