@@ -1,7 +1,12 @@
 (load "git@github.com:carpentry-org/parsec@0.2.0")
 
+(doc Info "is the parser-captured source position of a form: byte
+offset `pos`, `line`, and `col`.")
+(deftype Info [pos Int line Int col Int])
+
 (doc Form "is a representation of a Carp source-form AST. Every form
-in Carp source maps to one `Form` variant")
+in Carp source maps to one `Form` variant. Recursive children are
+`Located` so position info is preserved at every node.")
 
 (deftype Form
   (Itg        [Int])
@@ -14,11 +19,16 @@ in Carp source maps to one `Form` variant")
   (Str        [String])
   (Pat        [String])
   (Sym        [(Array String)])
-  (Lst        [(Array (Box Form))])
-  (Arr        [(Array (Box Form))])
-  (StaticArr  [(Array (Box Form))])
-  (Dict       [(Array (Box Form))])
+  (Lst        [(Array (Box Located))])
+  (Arr        [(Array (Box Located))])
+  (StaticArr  [(Array (Box Located))])
+  (Dict       [(Array (Box Located))])
   (Cmt        [String]))
+
+(doc Located "is a `Form` paired with the `Info` captured at its
+start position by the parser. The parser emits `Located` for every
+node, top-level and nested.")
+(deftype Located [form Form info Info])
 
 (defmodule Form
   (private join-children)
@@ -29,7 +39,8 @@ in Carp source maps to one `Form` variant")
         (do
           (when (Int.> i 0) (set! out (String.append &out " ")))
           (set! out (String.append &out
-                       &(Form.str (Box.peek (Array.unsafe-nth items i)))))))
+                       &(Form.str (Located.form
+                                    (Box.peek (Array.unsafe-nth items i))))))))
       out))
 
   (private join-segments)
@@ -98,6 +109,19 @@ in Carp source maps to one `Form` variant")
       (Dict items)  (fmt "{%s}"  &(join-children items))
       (Cmt s)       (fmt ";%s\n" s)))
   (implements str Form.str))
+
+(defmodule Info
+  (doc synthetic "is an `Info` for synthesized nodes (e.g. reader-macro
+expansions like `&x` → `(ref x)`, where the `ref` symbol isn't in the
+source). `pos`, `line`, and `col` are all `0`.")
+  (defn synthetic [] (Info.init 0 0 0)))
+
+(defmodule Located
+  (doc str "renders a `Located` as source-like text via the underlying
+`Form.str`. Position info is dropped — use `Located.info` directly if
+you need it.")
+  (defn str [l] (Form.str (Located.form l)))
+  (implements str Located.str))
 
 (defmodule Reader
   (private ws-byte?)
@@ -495,7 +519,7 @@ in Carp source maps to one `Form` variant")
       (fn [s] (Form.Cmt s))))
 
   (private *form*)
-  (def *form* (the (Parser Form) (Parser.placeholder)))
+  (def *form* (the (Parser Located) (Parser.placeholder)))
 
   (private *list-cell*)
   (def *list-cell* (the (Parser Form) (Parser.placeholder)))
@@ -599,7 +623,8 @@ in Carp source maps to one `Form` variant")
   (private macro-list)
   (hidden  macro-list)
   (defn macro-list [name body]
-    (Form.Lst [(Box.init (Form.Sym [@name])) (Box.init body)]))
+    (Form.Lst [(Box.init (Located.init (Form.Sym [@name]) (Info.synthetic)))
+               (Box.init body)]))
 
   (private reader-macro)
   (hidden  reader-macro)
@@ -638,44 +663,54 @@ in Carp source maps to one `Form` variant")
 
   (private form)
   (hidden  form)
+  (private wrap)
+  (hidden  wrap)
+  (defn wrap [info reply]
+    (match reply
+      (Reply.OkConsumed v c) (Reply.OkConsumed (Located.init v info) c)
+      (Reply.OkEmpty    v c) (Reply.OkEmpty    (Located.init v info) c)
+      (Reply.ErrConsumed e)  (Reply.ErrConsumed e)
+      (Reply.ErrEmpty    e)  (Reply.ErrEmpty    e)))
+
   (defn form []
     (Parser.init (fn [src len cur]
       (let [pos @(Cursor.pos cur)]
         (if (Int.>= pos len)
           (Reply.ErrEmpty (ParseErr.expected-at cur @"a form"))
-          (let [b (String.char-at src pos)]
+          (let [b    (String.char-at src pos)
+                info (Info.init pos @(Cursor.line cur) @(Cursor.col cur))]
             (cond
-              (Char.= b \()  (~(Parser.run &*list-cell*)         src len cur)
-              (Char.= b \[)  (~(Parser.run &*array-cell*)        src len cur)
-              (Char.= b \{)  (~(Parser.run &*dict-cell*)         src len cur)
-              (Char.= b \$)  (~(Parser.run &*static-array-cell*) src len cur)
-              (Char.= b \&)  (~(Parser.run &*ref-cell*)          src len cur)
-              (Char.= b \~)  (~(Parser.run &*deref-cell*)        src len cur)
-              (Char.= b \@)  (~(Parser.run &*copy-cell*)         src len cur)
-              (Char.= b \')  (~(Parser.run &*quote-cell*)        src len cur)
-              (Char.= b \`)  (~(Parser.run &*quasiquote-cell*)   src len cur)
-              (Char.= b \;)  (~(Parser.run &*comment-cell*)      src len cur)
+              (Char.= b \()  (wrap info (~(Parser.run &*list-cell*)         src len cur))
+              (Char.= b \[)  (wrap info (~(Parser.run &*array-cell*)        src len cur))
+              (Char.= b \{)  (wrap info (~(Parser.run &*dict-cell*)         src len cur))
+              (Char.= b \$)  (wrap info (~(Parser.run &*static-array-cell*) src len cur))
+              (Char.= b \&)  (wrap info (~(Parser.run &*ref-cell*)          src len cur))
+              (Char.= b \~)  (wrap info (~(Parser.run &*deref-cell*)        src len cur))
+              (Char.= b \@)  (wrap info (~(Parser.run &*copy-cell*)         src len cur))
+              (Char.= b \')  (wrap info (~(Parser.run &*quote-cell*)        src len cur))
+              (Char.= b \`)  (wrap info (~(Parser.run &*quasiquote-cell*)   src len cur))
+              (Char.= b \;)  (wrap info (~(Parser.run &*comment-cell*)      src len cur))
               (Char.= b \%)
                 (if (and (Int.< (Int.inc pos) len)
                          (Char.= (String.char-at src (Int.inc pos)) \@))
-                  (~(Parser.run &*unquote-splice-cell*) src len cur)
-                  (~(Parser.run &*unquote-cell*)        src len cur))
-              (Char.= b \")  (~(Parser.run &*string-cell*) src len cur)
-              (Char.= b \#)  (~(Parser.run &*pattern-cell*) src len cur)
-              (Char.= b \\)  (~(Parser.run &*char-cell*) src len cur)
+                  (wrap info (~(Parser.run &*unquote-splice-cell*) src len cur))
+                  (wrap info (~(Parser.run &*unquote-cell*)        src len cur)))
+              (Char.= b \")  (wrap info (~(Parser.run &*string-cell*) src len cur))
+              (Char.= b \#)  (wrap info (~(Parser.run &*pattern-cell*) src len cur))
+              (Char.= b \\)  (wrap info (~(Parser.run &*char-cell*) src len cur))
               (Char.= b \r)
                 (if (and (Int.< (Int.inc pos) len)
                          (Char.= (String.char-at src (Int.inc pos)) \"))
-                  (~(Parser.run &*raw-string-cell*) src len cur)
-                  (~(Parser.run &*symbol-cell*) src len cur))
+                  (wrap info (~(Parser.run &*raw-string-cell*) src len cur))
+                  (wrap info (~(Parser.run &*symbol-cell*) src len cur)))
               (or (digit? b) (Char.= b \-))
                 (let [reply (~(Parser.run &*number-cell*) src len cur)]
                   (match reply
-                    (Reply.OkConsumed v c) (Reply.OkConsumed v c)
-                    (Reply.OkEmpty v c)    (Reply.OkEmpty v c)
-                    (Reply.ErrConsumed e)  (Reply.ErrConsumed e)
-                    (Reply.ErrEmpty _)     (~(Parser.run &*symbol-cell*) src len cur)))
-              (~(Parser.run &*symbol-cell*) src len cur))))))))
+                    (Reply.OkConsumed v c) (wrap info (Reply.OkConsumed v c))
+                    (Reply.OkEmpty    v c) (wrap info (Reply.OkEmpty    v c))
+                    (Reply.ErrConsumed e)  (wrap info (Reply.ErrConsumed e))
+                    (Reply.ErrEmpty _)     (wrap info (~(Parser.run &*symbol-cell*) src len cur))))
+              (wrap info (~(Parser.run &*symbol-cell*) src len cur)))))))))
 
   (def -init
     (do

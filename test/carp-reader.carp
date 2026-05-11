@@ -14,64 +14,70 @@
   (let [arr (unsafe-parse s)]
     @(Box.peek (Array.unsafe-nth &arr 0))))
 
+(defn first-child-col [s]
+  (let [loc (first-form s)]
+    (match-ref (Located.form &loc)
+      (Lst items) @(Info.col (Located.info (Box.peek (Array.unsafe-nth items 0))))
+      _ -1)))
+
 (deftest t
     ; --- atoms ---
     (assert-equal t 1 (Array.length &(unsafe-parse "42"))
                   "parse: single integer")
-    (assert-equal t "42" &(Form.str &(first-form "42"))
+    (assert-equal t "42" &(Located.str &(first-form "42"))
                   "round-trip: integer")
-    (assert-equal t "-7l" &(Form.str &(first-form "-7l"))
+    (assert-equal t "-7l" &(Located.str &(first-form "-7l"))
                   "round-trip: long")
-    (assert-equal t "255b" &(Form.str &(first-form "255b"))
+    (assert-equal t "255b" &(Located.str &(first-form "255b"))
                   "round-trip: byte")
-    (assert-equal t "1.5f" &(Form.str &(first-form "1.5f"))
+    (assert-equal t "1.5f" &(Located.str &(first-form "1.5f"))
                   "round-trip: float with period")
-    (assert-equal t "2f" &(Form.str &(first-form "2f"))
+    (assert-equal t "2f" &(Located.str &(first-form "2f"))
                   "round-trip: float no period")
-    (assert-equal t "3.14" &(Form.str &(first-form "3.14"))
+    (assert-equal t "3.14" &(Located.str &(first-form "3.14"))
                   "round-trip: double")
-    (assert-equal t "true"  &(Form.str &(first-form "true"))  "bool true")
-    (assert-equal t "false" &(Form.str &(first-form "false")) "bool false")
-    (assert-equal t "\"hello\"" &(Form.str &(first-form "\"hello\""))
+    (assert-equal t "true"  &(Located.str &(first-form "true"))  "bool true")
+    (assert-equal t "false" &(Located.str &(first-form "false")) "bool false")
+    (assert-equal t "\"hello\"" &(Located.str &(first-form "\"hello\""))
                   "round-trip: string")
-    (assert-equal t "\\space" &(Form.str &(first-form "\\space"))
+    (assert-equal t "\\space" &(Located.str &(first-form "\\space"))
                   "round-trip: named char")
-    (assert-equal t "Foo.Bar.baz" &(Form.str &(first-form "Foo.Bar.baz"))
+    (assert-equal t "Foo.Bar.baz" &(Located.str &(first-form "Foo.Bar.baz"))
                   "round-trip: dotted symbol")
-    (assert-equal t "+" &(Form.str &(first-form "+"))
+    (assert-equal t "+" &(Located.str &(first-form "+"))
                   "round-trip: operator symbol")
 
     ; --- compound ---
     (assert-equal t "(defn foo [x] x)"
-                  &(Form.str &(first-form "(defn foo [x] x)"))
+                  &(Located.str &(first-form "(defn foo [x] x)"))
                   "round-trip: defn shape")
-    (assert-equal t "[1 2 3]"  &(Form.str &(first-form "[1 2 3]"))  "array")
-    (assert-equal t "$[0 0 0]" &(Form.str &(first-form "$[0 0 0]")) "static array")
-    (assert-equal t "{:a 1}"   &(Form.str &(first-form "{:a 1}"))   "dict")
+    (assert-equal t "[1 2 3]"  &(Located.str &(first-form "[1 2 3]"))  "array")
+    (assert-equal t "$[0 0 0]" &(Located.str &(first-form "$[0 0 0]")) "static array")
+    (assert-equal t "{:a 1}"   &(Located.str &(first-form "{:a 1}"))   "dict")
 
     ; --- reader macros lower to (name form) ---
-    (assert-equal t "(ref x)"   &(Form.str &(first-form "&x"))  "ref reader macro")
-    (assert-equal t "(deref x)" &(Form.str &(first-form "~x"))  "deref reader macro")
-    (assert-equal t "(copy x)"  &(Form.str &(first-form "@x"))  "copy reader macro")
-    (assert-equal t "(quote x)" &(Form.str &(first-form "'x"))  "quote reader macro")
-    (assert-equal t "(quasiquote x)" &(Form.str &(first-form "`x"))
+    (assert-equal t "(ref x)"   &(Located.str &(first-form "&x"))  "ref reader macro")
+    (assert-equal t "(deref x)" &(Located.str &(first-form "~x"))  "deref reader macro")
+    (assert-equal t "(copy x)"  &(Located.str &(first-form "@x"))  "copy reader macro")
+    (assert-equal t "(quote x)" &(Located.str &(first-form "'x"))  "quote reader macro")
+    (assert-equal t "(quasiquote x)" &(Located.str &(first-form "`x"))
                   "quasiquote reader macro")
-    (assert-equal t "(unquote x)" &(Form.str &(first-form "%x"))
+    (assert-equal t "(unquote x)" &(Located.str &(first-form "%x"))
                   "unquote reader macro")
     (assert-equal t "(unquote-splicing x)"
-                  &(Form.str &(first-form "%@x"))
+                  &(Located.str &(first-form "%@x"))
                   "unquote-splicing reader macro")
 
     ; --- comments are first-class ---
     (assert-equal t 2 (Array.length &(unsafe-parse "; hi\n42"))
                   "comment + form = two top-level nodes")
-    (assert-equal t ";a\n" &(Form.str &(first-form ";a"))
+    (assert-equal t ";a\n" &(Located.str &(first-form ";a"))
                   "comment node round-trip")
     (assert-equal t 3 (Array.length &(unsafe-parse "1 ; mid\n 2"))
                   "comment between two top-level forms")
     ; Inline comments inside compound forms.
     (assert-equal t 3 (let [f (first-form "(a ; comment\n b)")]
-                        (match-ref &f
+                        (match-ref (Located.form &f)
                           (Lst items) (Array.length items)
                           _ -1))
                   "comment inside list survives")
@@ -83,6 +89,21 @@
                        "; header comment\n(defn foo [x] x)\n(def y 1)"))
                   "comment + two defns at top level")
 
+    ; --- Info / Located positions ---
+    (assert-equal t 1
+                  @(Info.line (Located.info &(first-form "42")))
+                  "top-level form starts on line 1")
+    (assert-equal t 1
+                  @(Info.col  (Located.info &(first-form "42")))
+                  "top-level form starts on col 1")
+    (assert-equal t 2
+                  @(Info.line (Located.info &(first-form "\n42")))
+                  "leading newline pushes line to 2")
+    (assert-equal t 4
+                  @(Info.col  (Located.info &(first-form "   x")))
+                  "leading spaces push col forward")
+    (assert-equal t 2 (first-child-col "(a b)")
+                  "child position is relative to source, not parent")
     ; --- error cases ---
     (assert-true t (parse-error? "(")           "unbalanced open paren errors")
     (assert-true t (parse-error? "\"unterminated") "unterminated string errors"))
