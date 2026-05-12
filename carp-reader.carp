@@ -26,9 +26,11 @@ in Carp source maps to one `Form` variant. Recursive children are
   (Cmt        [String]))
 
 (doc Located "is a `Form` paired with the `Info` captured at its
-start position by the parser. The parser emits `Located` for every
-node, top-level and nested.")
-(deftype Located [form Form info Info])
+start position (`info`) and the position just after its last byte
+(`end`). The parser emits `Located` for every node, top-level and
+nested. Synthesized nodes (reader-macro expansions) carry
+`Info.synthetic` for both.")
+(deftype Located [form Form info Info end Info])
 
 (defmodule Form
   (private join-children)
@@ -55,11 +57,16 @@ node, top-level and nested.")
 
   (private escape-string-byte)
   (hidden  escape-string-byte)
+  (doc escape-string-byte "renders a byte for inclusion in a string
+literal. `\\` and `\"` must be escaped to keep the literal valid;
+`\\r` and `\\t` are kept as escapes because users rarely write
+literal carriage returns / tabs in source. `\\n` (literal newline)
+is emitted as a raw newline byte so multi-line string literals
+round-trip readably.")
   (defn escape-string-byte [b]
     (cond
       (Char.= b \\)        @"\\\\"
       (Char.= b \")        @"\\\""
-      (Char.= b \newline)  @"\\n"
       (Char.= b \tab)      @"\\t"
       (Char.= b \return)   @"\\r"
       (String.from-bytes &[(Byte.from-int (Int.bit-and 0xff (Char.to-int b)))])))
@@ -196,10 +203,46 @@ you need it.")
                          (hex-value (String.char-at src (Int.+ pos i))))))
       acc))
 
-  (private push-codepoint)
-  (hidden  push-codepoint)
-  (defn push-codepoint [chars cp]
-    (Array.push-back chars (Char.from-int cp)))
+  (private push-utf8-bytes)
+  (hidden  push-utf8-bytes)
+  (doc push-utf8-bytes "encodes a Unicode codepoint as UTF-8 bytes and
+appends them to `bytes`. Used by `\\u` / `\\U` string escapes which
+specify codepoints rather than raw bytes.")
+  (defn push-utf8-bytes [bytes cp]
+    (cond
+      (Int.< cp 0x80)
+        (Array.push-back bytes (Byte.from-int cp))
+      (Int.< cp 0x800)
+        (let-do [out bytes]
+          (set! out (Array.push-back out
+                      (Byte.from-int (Int.bit-or 0xC0 (Int.bit-shift-right cp 6)))))
+          (Array.push-back out
+            (Byte.from-int (Int.bit-or 0x80 (Int.bit-and cp 0x3F)))))
+      (Int.< cp 0x10000)
+        (let-do [out bytes]
+          (set! out (Array.push-back out
+                      (Byte.from-int (Int.bit-or 0xE0 (Int.bit-shift-right cp 12)))))
+          (set! out (Array.push-back out
+                      (Byte.from-int (Int.bit-or 0x80
+                                       (Int.bit-and (Int.bit-shift-right cp 6) 0x3F)))))
+          (Array.push-back out
+            (Byte.from-int (Int.bit-or 0x80 (Int.bit-and cp 0x3F)))))
+      (let-do [out bytes]
+        (set! out (Array.push-back out
+                    (Byte.from-int (Int.bit-or 0xF0 (Int.bit-shift-right cp 18)))))
+        (set! out (Array.push-back out
+                    (Byte.from-int (Int.bit-or 0x80
+                                     (Int.bit-and (Int.bit-shift-right cp 12) 0x3F)))))
+        (set! out (Array.push-back out
+                    (Byte.from-int (Int.bit-or 0x80
+                                     (Int.bit-and (Int.bit-shift-right cp 6) 0x3F)))))
+        (Array.push-back out
+          (Byte.from-int (Int.bit-or 0x80 (Int.bit-and cp 0x3F)))))))
+
+  (private push-byte)
+  (hidden  push-byte)
+  (defn push-byte [bytes c]
+    (Array.push-back bytes (Byte.from-int (Int.bit-and 0xff (Char.to-int c)))))
 
   (private parse-digits-from)
   (hidden  parse-digits-from)
@@ -218,6 +261,31 @@ you need it.")
       (Int.= base 16) (hex-digit? c)
       (Int.= base 2)  (bin-digit? c)
       (digit? c)))
+
+  (private scan-exponent)
+  (hidden  scan-exponent)
+  (doc scan-exponent "scans a decimal exponent starting at `pos`. If
+the byte at `pos` is `e` or `E` and is followed by an optional sign
+and at least one digit, returns the position just past the last
+exponent digit. Otherwise returns `pos` unchanged, signalling that
+there is no exponent here.")
+  (defn scan-exponent [src len pos]
+    (if (Int.>= pos len)
+      pos
+      (let [c0 (String.char-at src pos)]
+        (if (not (or (Char.= c0 \e) (Char.= c0 \E)))
+          pos
+          (let-do [p (Int.inc pos)]
+            (when (and (Int.< p len)
+                       (let [c (String.char-at src p)]
+                         (or (Char.= c \+) (Char.= c \-))))
+              (set! p (Int.inc p)))
+            (let-do [digits-start p]
+              (while-do (and (Int.< p len) (digit? (String.char-at src p)))
+                (set! p (Int.inc p)))
+              (if (Int.> p digits-start)
+                p
+                pos)))))))
 
   (private number)
   (hidden  number)
@@ -263,13 +331,37 @@ you need it.")
                         (set! frac-end (Int.inc frac-end)))
                       (if (Int.= frac-end frac-start)
                         (Reply.ErrConsumed (ParseErr.expected-at cur @"fractional digits"))
-                        (let-do [post frac-end
+                        (let-do [exp-end (scan-exponent src len frac-end)
+                                 post exp-end
                                  is-float false]
                           (when (and (Int.< post len)
                                      (Char.= (String.char-at src post) \f))
                             (do (set! is-float true)
                                 (set! post (Int.inc post))))
-                          (let [num-text (String.byte-slice src start frac-end)]
+                          (let [num-text (String.byte-slice src start exp-end)]
+                            (match (Double.from-string &num-text)
+                              (Maybe.Just d)
+                                (Reply.OkConsumed
+                                  (if is-float
+                                    (Form.Flt (Double.to-float d))
+                                    (Form.Dbl d))
+                                  (Cursor.advance-by cur (Int.- post start) false))
+                              (Maybe.Nothing)
+                                (Reply.ErrConsumed
+                                  (ParseErr.expected-at cur
+                                    (if is-float @"float" @"double"))))))))
+                  (or (Char.= next-c \e) (Char.= next-c \E))
+                    (let-do [exp-end (scan-exponent src len pos)]
+                      (if (Int.= exp-end pos)
+                        (Reply.OkConsumed (Form.Itg (Long.to-int int-value))
+                                          (Cursor.advance-by cur (Int.- pos start) false))
+                        (let-do [post exp-end
+                                 is-float false]
+                          (when (and (Int.< post len)
+                                     (Char.= (String.char-at src post) \f))
+                            (do (set! is-float true)
+                                (set! post (Int.inc post))))
+                          (let [num-text (String.byte-slice src start exp-end)]
                             (match (Double.from-string &num-text)
                               (Maybe.Just d)
                                 (Reply.OkConsumed
@@ -307,7 +399,7 @@ you need it.")
                 (not (Char.= (String.char-at src start) \")))
           (Reply.ErrEmpty (ParseErr.expected-at cur @"string"))
           (let-do [c (Cursor.advance cur \")
-                   chars []
+                   bytes (the (Array Byte) [])
                    going true
                    err false]
             (while-do (and going (not err))
@@ -324,28 +416,28 @@ you need it.")
                         (let [esc (String.char-at src (Int.+ @(Cursor.pos &c) 1))]
                           (cond
                             (Char.= esc \n)
-                              (do (set! chars (Array.push-back chars \newline))
+                              (do (set! bytes (push-byte bytes \newline))
                                   (set! c (Cursor.advance-by &c 2 false)))
                             (Char.= esc \t)
-                              (do (set! chars (Array.push-back chars \tab))
+                              (do (set! bytes (push-byte bytes \tab))
                                   (set! c (Cursor.advance-by &c 2 false)))
                             (Char.= esc \r)
-                              (do (set! chars (Array.push-back chars \return))
+                              (do (set! bytes (push-byte bytes \return))
                                   (set! c (Cursor.advance-by &c 2 false)))
                             (Char.= esc \b)
-                              (do (set! chars (Array.push-back chars \backspace))
+                              (do (set! bytes (push-byte bytes \backspace))
                                   (set! c (Cursor.advance-by &c 2 false)))
                             (Char.= esc \f)
-                              (do (set! chars (Array.push-back chars \formfeed))
+                              (do (set! bytes (push-byte bytes \formfeed))
                                   (set! c (Cursor.advance-by &c 2 false)))
                             (Char.= esc \v)
-                              (do (set! chars (Array.push-back chars (Char.from-int 11)))
+                              (do (set! bytes (Array.push-back bytes (Byte.from-int 11)))
                                   (set! c (Cursor.advance-by &c 2 false)))
                             (Char.= esc \a)
-                              (do (set! chars (Array.push-back chars (Char.from-int 7)))
+                              (do (set! bytes (Array.push-back bytes (Byte.from-int 7)))
                                   (set! c (Cursor.advance-by &c 2 false)))
                             (or (Char.= esc \\) (or (Char.= esc \") (Char.= esc \')))
-                              (do (set! chars (Array.push-back chars esc))
+                              (do (set! bytes (push-byte bytes esc))
                                   (set! c (Cursor.advance-by &c 2 false)))
                             (Char.= esc \x)
                               (let-do [digits-start (Int.+ @(Cursor.pos &c) 2)
@@ -355,16 +447,17 @@ you need it.")
                                   (set! end (Int.inc end)))
                                 (if (Int.> end digits-start)
                                   (do
-                                    (set! chars (Array.push-back chars
-                                                  (Char.from-int (read-hex src digits-start
-                                                                    (Int.- end digits-start)))))
+                                    (set! bytes (Array.push-back bytes
+                                                  (Byte.from-int (Int.bit-and 0xff
+                                                    (read-hex src digits-start
+                                                      (Int.- end digits-start))))))
                                     (set! c (Cursor.advance-by &c (Int.- end @(Cursor.pos &c)) false)))
                                   (set! err true)))
                             (Char.= esc \u)
                               (if (Int.>= (Int.+ @(Cursor.pos &c) 6) (Int.inc len))
                                 (set! err true)
                                 (do
-                                  (set! chars (push-codepoint chars
+                                  (set! bytes (push-utf8-bytes bytes
                                                 (read-hex src
                                                   (Int.+ @(Cursor.pos &c) 2) 4)))
                                   (set! c (Cursor.advance-by &c 6 false))))
@@ -372,18 +465,18 @@ you need it.")
                               (if (Int.>= (Int.+ @(Cursor.pos &c) 10) (Int.inc len))
                                 (set! err true)
                                 (do
-                                  (set! chars (push-codepoint chars
+                                  (set! bytes (push-utf8-bytes bytes
                                                 (read-hex src
                                                   (Int.+ @(Cursor.pos &c) 2) 8)))
                                   (set! c (Cursor.advance-by &c 10 false))))
-                            (do (set! chars (Array.push-back chars \\))
-                                (set! chars (Array.push-back chars esc))
+                            (do (set! bytes (push-byte bytes \\))
+                                (set! bytes (push-byte bytes esc))
                                 (set! c (Cursor.advance-by &c 2 false))))))
-                    (do (set! chars (Array.push-back chars ch))
+                    (do (set! bytes (push-byte bytes ch))
                         (set! c (Cursor.advance &c ch)))))))
             (if err
               (Reply.ErrConsumed (ParseErr.expected-at &c @"closing quote"))
-              (Reply.OkConsumed (Form.Str (String.from-chars &chars)) c))))))))
+              (Reply.OkConsumed (Form.Str (String.from-bytes &bytes)) c))))))))
 
   (private raw-string)
   (hidden  raw-string)
@@ -623,7 +716,9 @@ you need it.")
   (private macro-list)
   (hidden  macro-list)
   (defn macro-list [name body]
-    (Form.Lst [(Box.init (Located.init (Form.Sym [@name]) (Info.synthetic)))
+    (Form.Lst [(Box.init (Located.init (Form.Sym [@name])
+                                       (Info.synthetic)
+                                       (Info.synthetic)))
                (Box.init body)]))
 
   (private reader-macro)
@@ -667,10 +762,14 @@ you need it.")
   (hidden  wrap)
   (defn wrap [info reply]
     (match reply
-      (Reply.OkConsumed v c) (Reply.OkConsumed (Located.init v info) c)
-      (Reply.OkEmpty    v c) (Reply.OkEmpty    (Located.init v info) c)
-      (Reply.ErrConsumed e)  (Reply.ErrConsumed e)
-      (Reply.ErrEmpty    e)  (Reply.ErrEmpty    e)))
+      (Reply.OkConsumed v c)
+        (let-do [end (Info.init @(Cursor.pos &c) @(Cursor.line &c) @(Cursor.col &c))]
+          (Reply.OkConsumed (Located.init v info end) c))
+      (Reply.OkEmpty v c)
+        (let-do [end (Info.init @(Cursor.pos &c) @(Cursor.line &c) @(Cursor.col &c))]
+          (Reply.OkEmpty (Located.init v info end) c))
+      (Reply.ErrConsumed e) (Reply.ErrConsumed e)
+      (Reply.ErrEmpty    e) (Reply.ErrEmpty    e)))
 
   (defn form []
     (Parser.init (fn [src len cur]

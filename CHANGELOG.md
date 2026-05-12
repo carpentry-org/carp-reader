@@ -3,6 +3,24 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project follows [Semantic Versioning](https://semver.org/).
 
+## [0.3.0]
+
+- `Located` gains an `end Info` field tracking the position just past
+  the form's last byte. Useful for tools (e.g. formatters) that need
+  to detect gaps between siblings in the original source. Breaking:
+  `Located.init` now takes three arguments and the deftype has three
+  fields.
+- `Form.str` emits literal newlines inside string literals rather
+  than escaping them as `\n`. Multi-line string literals in source
+  round-trip readably. Breaking for consumers relying on
+  fully-escaped output.
+- String parser now preserves UTF-8 byte sequences verbatim. The
+  previous accumulator-as-`Array Char` plus `String.from-chars`
+  double-encoded multi-byte UTF-8 input.
+- Number parser accepts scientific notation: `1e6`, `1e+06`,
+  `1.5e-3`, `1e6f`. Matches the output of `Double.str` so doubles
+  round-trip cleanly.
+
 ## [0.2.0]
 
 - Every parsed node carries an `Info` (byte offset, line, column). The

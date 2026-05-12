@@ -20,6 +20,18 @@
       (Lst items) @(Info.col (Located.info (Box.peek (Array.unsafe-nth items 0))))
       _ -1)))
 
+(defn is-double? [s]
+  (let [loc (first-form s)]
+    (match-ref (Located.form &loc)
+      (Dbl _) true
+      _ false)))
+
+(defn is-float? [s]
+  (let [loc (first-form s)]
+    (match-ref (Located.form &loc)
+      (Flt _) true
+      _ false)))
+
 (deftest t
     ; --- atoms ---
     (assert-equal t 1 (Array.length &(unsafe-parse "42"))
@@ -104,6 +116,35 @@
                   "leading spaces push col forward")
     (assert-equal t 2 (first-child-col "(a b)")
                   "child position is relative to source, not parent")
+    ; --- scientific notation in doubles / floats ---
+    (assert-true  t (is-double? "1e6")    "1e6 parses as Double")
+    (assert-true  t (is-double? "1e+06")  "1e+06 parses as Double")
+    (assert-true  t (is-double? "1.5e-3") "1.5e-3 parses as Double")
+    (assert-true  t (is-float?  "1e6f")   "1e6f parses as Float")
+    (assert-equal t 2
+                  (Array.length &(unsafe-parse "1e6 x"))
+                  "1e6 followed by symbol parses as two top-level forms")
+
+    ; --- UTF-8 bytes round-trip through Form.Str ---
+    (assert-equal t "\"\xc2\xb5s\"" &(Located.str &(first-form "\"\xc2\xb5s\""))
+                  "string with µ (2-byte UTF-8) round-trips")
+
+    ; --- end positions track the byte after the form ---
+    (assert-equal t 2
+                  @(Info.pos (Located.end &(first-form "42")))
+                  "atom end pos is byte-after-last")
+    (assert-equal t 5
+                  @(Info.pos (Located.end &(first-form "(a b)")))
+                  "list end pos is byte-after-`)`")
+    (assert-equal t 2
+                  @(Info.line (Located.end &(first-form "(a\n b)")))
+                  "multi-line form's end line tracks where it closed")
+
+    ; --- multi-line strings round-trip without `\n` escapes ---
+    (assert-equal t "\"a\nb\""
+                  &(Located.str &(first-form "\"a\nb\""))
+                  "string with literal newline stays as literal newline")
+
     ; --- error cases ---
     (assert-true t (parse-error? "(")           "unbalanced open paren errors")
     (assert-true t (parse-error? "\"unterminated") "unterminated string errors"))
