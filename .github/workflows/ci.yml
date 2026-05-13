@@ -32,7 +32,11 @@ jobs:
           sudo install -m 755 /tmp/angler/out/angler /usr/local/bin/
 
       - name: Lint
-        run: angler $(find . -name '*.carp' -not -path './out/*' -not -path './docs/*')
+        run: |
+          angler $(find . -name '*.carp' \
+            -not -path './out/*' \
+            -not -path './docs/*' \
+            -not -path './.carp-src/*')
 
       - name: Generate docs
         run: carp -x gendocs.carp
