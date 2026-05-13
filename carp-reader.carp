@@ -294,10 +294,10 @@ there is no exponent here.")
       (let-do [start @(Cursor.pos cur)
                pos start
                negate false]
-        (when (and (Int.< pos len)
-                   (Char.= (String.char-at src pos) \-))
-          (do (set! negate true)
-              (set! pos (Int.inc pos))))
+        (when-do (and (Int.< pos len)
+                      (Char.= (String.char-at src pos) \-))
+          (set! negate true)
+          (set! pos (Int.inc pos)))
         (let-do [base 10
                  digit-start pos]
           (when (and (Int.<= (Int.+ pos 2) len)
@@ -334,10 +334,10 @@ there is no exponent here.")
                         (let-do [exp-end (scan-exponent src len frac-end)
                                  post exp-end
                                  is-float false]
-                          (when (and (Int.< post len)
-                                     (Char.= (String.char-at src post) \f))
-                            (do (set! is-float true)
-                                (set! post (Int.inc post))))
+                          (when-do (and (Int.< post len)
+                                        (Char.= (String.char-at src post) \f))
+                            (set! is-float true)
+                            (set! post (Int.inc post)))
                           (let [num-text (String.byte-slice src start exp-end)]
                             (match (Double.from-string &num-text)
                               (Maybe.Just d)
@@ -357,10 +357,10 @@ there is no exponent here.")
                                           (Cursor.advance-by cur (Int.- pos start) false))
                         (let-do [post exp-end
                                  is-float false]
-                          (when (and (Int.< post len)
-                                     (Char.= (String.char-at src post) \f))
-                            (do (set! is-float true)
-                                (set! post (Int.inc post))))
+                          (when-do (and (Int.< post len)
+                                        (Char.= (String.char-at src post) \f))
+                            (set! is-float true)
+                            (set! post (Int.inc post)))
                           (let [num-text (String.byte-slice src start exp-end)]
                             (match (Double.from-string &num-text)
                               (Maybe.Just d)
