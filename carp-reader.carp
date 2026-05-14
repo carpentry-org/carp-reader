@@ -119,13 +119,22 @@ strings round-trip readably.")
   (doc str "renders an `Form` back to source-like text. Round-trips
   for syntactic content; whitespace around comments is left to the
   caller's formatting pass.")
+  (private double-str)
+  (hidden double-str)
+  (doc double-str "renders a `Double` with a decimal point preserved.
+`Double.str 10.0` returns `\"10\"`, which round-trips as an `Int`; we
+append `.0` so the source reads as a double again.")
+  (defn double-str [d]
+    (let-do [s (Double.str d)]
+      (if (String.contains? &s \.) s (String.append &s ".0"))))
+
   (defn str [a]
     (match-ref a
       (Itg n) (Int.str @n)
       (Byt b) (Byte.str @b)
       (Lng n) (String.append &(Long.str @n) "l")
       (Flt f) (Float.str @f)
-      (Dbl d) (Double.str @d)
+      (Dbl d) (double-str @d)
       (Bol b) (if @b @"true" @"false")
       (Chr c) (show-char @c)
       (Str s) (fmt "\"%s\"" &(escape-string s))

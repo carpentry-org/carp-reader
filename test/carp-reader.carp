@@ -151,6 +151,12 @@
     &(Located.str &(first-form "\"µs\""))
     "string with µ (2-byte UTF-8) round-trips")
 
+  ; --- whole-number doubles preserve the decimal point ---
+  (assert-equal t
+    "10.0"
+    &(Located.str &(first-form "10.0"))
+    "10.0 round-trips as Double, not Int")
+
   ; --- end positions track the byte after the form ---
   (assert-equal t
     2
