@@ -2,7 +2,9 @@
 
 (doc Info "is the parser-captured source position of a form: byte
 offset `pos`, `line`, and `col`.")
-(deftype Info [pos Int line Int col Int])
+(deftype Info [pos Int
+               line Int
+               col Int])
 
 (doc Form "is a representation of a Carp source-form AST. Every form
 in Carp source maps to one `Form` variant. Recursive children are
@@ -30,7 +32,9 @@ start position (`info`) and the position just after its last byte
 (`end`). The parser emits `Located` for every node, top-level and
 nested. Synthesized nodes (reader-macro expansions) carry
 `Info.synthetic` for both.")
-(deftype Located [form Form info Info end Info])
+(deftype Located [form Form
+                  info Info
+                  end Info])
 
 (defmodule Form
   (private join-children)
@@ -75,13 +79,27 @@ round-trip readably.")
 
   (private escape-string)
   (hidden escape-string)
+  (doc escape-string "byte-walks `s`, applying `escape-string-byte`. CRLF
+(`\\r` followed by raw `\\n`) is emitted as the escape pair `\\r\\n` so
+protocol-style strings (HTTP, Redis) keep their line endings explicit
+on the source side. A standalone `\\n` is kept raw — multi-line doc
+strings round-trip readably.")
   (defn escape-string [s]
     (let-do [out @""
-             n (String.length s)]
-      (for [i 0 n]
-        (set!
-          out
-          (String.append &out &(escape-string-byte (String.char-at s i)))))
+             n (String.length s)
+             i 0]
+      (while-do (Int.< i n)
+        (let-do [b (String.char-at s i)
+                 crlf? (and
+                   (Char.= b \return)
+                   (and
+                     (Int.< (Int.inc i) n)
+                     (Char.= (String.char-at s (Int.inc i)) \newline)))]
+          (if crlf?
+            (do (set! out (String.append &out "\\r\\n")) (set! i (Int.+ i 2)))
+            (do
+              (set! out (String.append &out &(escape-string-byte b)))
+              (set! i (Int.inc i))))))
       out))
 
   (private show-char)

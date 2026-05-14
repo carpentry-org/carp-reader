@@ -30,53 +30,44 @@
   (assert-equal t "42" &(Located.str &(first-form "42")) "round-trip: integer")
   (assert-equal t "-7l" &(Located.str &(first-form "-7l")) "round-trip: long")
   (assert-equal t "255b" &(Located.str &(first-form "255b")) "round-trip: byte")
-  (assert-equal
-    t
+  (assert-equal t
     "1.5f"
     &(Located.str &(first-form "1.5f"))
     "round-trip: float with period")
-  (assert-equal
-    t
+  (assert-equal t
     "2f"
     &(Located.str &(first-form "2f"))
     "round-trip: float no period")
-  (assert-equal
-    t
+  (assert-equal t
     "3.14"
     &(Located.str &(first-form "3.14"))
     "round-trip: double")
   (assert-equal t "true" &(Located.str &(first-form "true")) "bool true")
   (assert-equal t "false" &(Located.str &(first-form "false")) "bool false")
-  (assert-equal
-    t
+  (assert-equal t
     "\"hello\""
     &(Located.str &(first-form "\"hello\""))
     "round-trip: string")
-  (assert-equal
-    t
+  (assert-equal t
     "\\space"
     &(Located.str &(first-form "\\space"))
     "round-trip: named char")
-  (assert-equal
-    t
+  (assert-equal t
     "Foo.Bar.baz"
     &(Located.str &(first-form "Foo.Bar.baz"))
     "round-trip: dotted symbol")
-  (assert-equal
-    t
+  (assert-equal t
     "+"
     &(Located.str &(first-form "+"))
     "round-trip: operator symbol")
 
   ; --- compound ---
-  (assert-equal
-    t
+  (assert-equal t
     "(defn foo [x] x)"
     &(Located.str &(first-form "(defn foo [x] x)"))
     "round-trip: defn shape")
   (assert-equal t "[1 2 3]" &(Located.str &(first-form "[1 2 3]")) "array")
-  (assert-equal
-    t
+  (assert-equal t
     "$[0 0 0]"
     &(Located.str &(first-form "$[0 0 0]"))
     "static array")
@@ -84,33 +75,27 @@
 
   ; --- reader macros lower to (name form) ---
   (assert-equal t "(ref x)" &(Located.str &(first-form "&x")) "ref reader macro")
-  (assert-equal
-    t
+  (assert-equal t
     "(deref x)"
     &(Located.str &(first-form "~x"))
     "deref reader macro")
-  (assert-equal
-    t
+  (assert-equal t
     "(copy x)"
     &(Located.str &(first-form "@x"))
     "copy reader macro")
-  (assert-equal
-    t
+  (assert-equal t
     "(quote x)"
     &(Located.str &(first-form "'x"))
     "quote reader macro")
-  (assert-equal
-    t
+  (assert-equal t
     "(quasiquote x)"
     &(Located.str &(first-form "`x"))
     "quasiquote reader macro")
-  (assert-equal
-    t
+  (assert-equal t
     "(unquote x)"
     &(Located.str &(first-form "%x"))
     "unquote reader macro")
-  (assert-equal
-    t
+  (assert-equal t
     "(unquote-splicing x)"
     &(Located.str &(first-form "%@x"))
     "unquote-splicing reader macro")
@@ -132,25 +117,21 @@
 (def y 1)")) "comment + two defns at top level")
 
   ; --- Info / Located positions ---
-  (assert-equal
-    t
+  (assert-equal t
     1
     @(Info.line (Located.info &(first-form "42")))
     "top-level form starts on line 1")
-  (assert-equal
-    t
+  (assert-equal t
     1
     @(Info.col (Located.info &(first-form "42")))
     "top-level form starts on col 1")
   (assert-equal t 2 @(Info.line (Located.info &(first-form "
 42"))) "leading newline pushes line to 2")
-  (assert-equal
-    t
+  (assert-equal t
     4
     @(Info.col (Located.info &(first-form "   x")))
     "leading spaces push col forward")
-  (assert-equal
-    t
+  (assert-equal t
     2
     (first-child-col "(a b)")
     "child position is relative to source, not parent")
@@ -159,27 +140,23 @@
   (assert-true t (is-double? "1e+06") "1e+06 parses as Double")
   (assert-true t (is-double? "1.5e-3") "1.5e-3 parses as Double")
   (assert-true t (is-float? "1e6f") "1e6f parses as Float")
-  (assert-equal
-    t
+  (assert-equal t
     2
     (Array.length &(unsafe-parse "1e6 x"))
     "1e6 followed by symbol parses as two top-level forms")
 
   ; --- UTF-8 bytes round-trip through Form.Str ---
-  (assert-equal
-    t
+  (assert-equal t
     "\"µs\""
     &(Located.str &(first-form "\"µs\""))
     "string with µ (2-byte UTF-8) round-trips")
 
   ; --- end positions track the byte after the form ---
-  (assert-equal
-    t
+  (assert-equal t
     2
     @(Info.pos (Located.end &(first-form "42")))
     "atom end pos is byte-after-last")
-  (assert-equal
-    t
+  (assert-equal t
     5
     @(Info.pos (Located.end &(first-form "(a b)")))
     "list end pos is byte-after-`)`")
