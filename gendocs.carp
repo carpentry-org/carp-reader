@@ -21,4 +21,5 @@
 - [`Reader`](./Reader.html) are the `parse` / `parse-form` entry points.")
 
 (save-docs Form Reader)
-(defn main [] (System.system "mv ./docs/carp-reader_index.html ./docs/index.html"))
+(defn main []
+  (System.system "mv ./docs/carp-reader_index.html ./docs/index.html"))
