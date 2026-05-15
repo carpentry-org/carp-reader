@@ -119,14 +119,25 @@ strings round-trip readably.")
   (doc str "renders an `Form` back to source-like text. Round-trips
   for syntactic content; whitespace around comments is left to the
   caller's formatting pass.")
+  (private double-round-trips?)
+  (hidden double-round-trips?)
+  (defn double-round-trips? [s d]
+    (match (Double.from-string s)
+      (Maybe.Just d2) (Double.= d2 d)
+      (Maybe.Nothing) false))
+
   (private double-str)
   (hidden double-str)
-  (doc double-str "renders a `Double` keeping it lexically a double.
-`Double.str 10.0` returns `\"10\"`, which would round-trip as an `Int`;
-scientific notation (`1e+09`) round-trips fine on its own. Append `.0`
-only when the output has neither a decimal point nor an exponent.")
+  (doc double-str "renders a `Double` so it round-trips and stays
+lexically a double. `Double.str` uses `%g` (6 sig figs by default),
+which loses precision for values like `3.14159265358979`. We try that
+first; if it doesn't parse back to the same `Double`, fall back to
+`%.17g` (17 sig figs guarantees exact round-trip for IEEE 754).
+Finally, append `.0` when the result has no decimal point or exponent,
+so the source reads as a double instead of an int.")
   (defn double-str [d]
     (let-do [s (Double.str d)]
+      (unless (double-round-trips? &s d) (set! s (Double.format "%.17g" d)))
       (if (or
           (String.contains? &s \.)
           (or (String.contains? &s \e) (String.contains? &s \E)))

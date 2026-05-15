@@ -156,12 +156,18 @@
     "10.0"
     &(Located.str &(first-form "10.0"))
     "10.0 round-trips as Double, not Int")
-  ; Big doubles render in scientific notation; no `.0` should be
-  ; appended in that case (it would produce invalid `1e+09.0`).
+  ; Whole-number doubles that don't round-trip through `%g` fall back
+  ; to `%.17g` (which renders an integer without exponent) and then get
+  ; `.0` appended so they still parse as Double.
   (assert-equal t
-    "1e+09"
+    "999999999.0"
     &(Located.str &(first-form "999999999.0"))
-    "large Double keeps scientific notation, no spurious .0")
+    "999999999.0 round-trips with .0 suffix, not lossy scientific notation")
+  ; A Double written with high precision keeps that precision.
+  (assert-equal t
+    "3.14159265358979"
+    &(Located.str &(first-form "3.14159265358979"))
+    "high-precision Double round-trips bit-exact")
 
   ; --- end positions track the byte after the form ---
   (assert-equal t
