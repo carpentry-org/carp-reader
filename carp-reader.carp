@@ -143,8 +143,9 @@ so the result remains lexically a `Double` (e.g. `\"10.000\"` becomes
       (let-do [bs (String.chars s)
                n (Array.length &bs)
                end n]
-        (while-do (and (Int.> end 2)
-                       (Char.= @(Array.unsafe-nth &bs (Int.dec end)) \0))
+        (while-do (and
+            (Int.> end 2)
+            (Char.= @(Array.unsafe-nth &bs (Int.dec end)) \0))
           (set! end (Int.dec end)))
         (when (Char.= @(Array.unsafe-nth &bs (Int.dec end)) \.)
           (set! end (Int.inc end)))
@@ -165,7 +166,7 @@ result has no decimal point so it parses as `Double`, not `Int`.")
     (let-do [s (Double.str d)]
       (when (or (not (decimal-only? &s)) (not (double-round-trips? &s d)))
         (set! s (Double.format "%.17g" d)))
-      (when (not (decimal-only? &s))
+      (unless (decimal-only? &s)
         (set! s (strip-trailing-zeros &(Double.format "%.30f" d))))
       (if (String.contains? &s \.) s (String.append &s ".0"))))
 
