@@ -46,7 +46,9 @@ nested. Synthesized nodes (reader-macro expansions) carry
           (when (Int.> i 0) (set! out (String.append &out " ")))
           (set! out
                 (String.append &out
-                  &(Form.str (Located.form (Box.peek (Array.unsafe-nth items i))))))))
+                               &(Form.str
+                                 (Located.form (Box.peek (Array.unsafe-nth items
+                                                                           i))))))))
       out))
 
   (private join-segments)
@@ -89,8 +91,8 @@ strings round-trip readably.")
       (while-do (Int.< i n)
         (let-do [b (String.char-at s i)
                  crlf? (and (Char.= b \return)
-                   (and (Int.< (Int.inc i) n)
-                     (Char.= (String.char-at s (Int.inc i)) \newline)))]
+                            (and (Int.< (Int.inc i) n)
+                                 (Char.= (String.char-at s (Int.inc i)) \newline)))]
           (if crlf?
             (do (set! out (String.append &out "\\r\\n")) (set! i (Int.+ i 2)))
             (do
@@ -140,7 +142,7 @@ so the result remains lexically a `Double` (e.g. `\"10.000\"` becomes
                n (Array.length &bs)
                end n]
         (while-do (and (Int.> end 2)
-            (Char.= @(Array.unsafe-nth &bs (Int.dec end)) \0))
+                       (Char.= @(Array.unsafe-nth &bs (Int.dec end)) \0))
           (set! end (Int.dec end)))
         (when (Char.= @(Array.unsafe-nth &bs (Int.dec end)) \.)
           (set! end (Int.inc end)))
@@ -169,8 +171,8 @@ result has no decimal point so it parses as `Double`, not `Int`.")
                  i 0]
           (while-do (Int.< i n)
             (let-do [p @(Array.unsafe-nth &precs i)
-                fmt-str (fmt "%%.%df" p)
-                candidate (strip-trailing-zeros &(Double.format &fmt-str d))]
+                     fmt-str (fmt "%%.%df" p)
+                     candidate (strip-trailing-zeros &(Double.format &fmt-str d))]
               (when-do (double-round-trips? &candidate d)
                 (set! s candidate)
                 (set! i n)))
@@ -245,10 +247,11 @@ you need it.")
   (private sym-extra?)
   (hidden sym-extra?)
   (defn sym-extra? [c]
-    (or (or (or (Char.= c \+) (Char.= c \-)) (or (Char.= c \*) (Char.= c \/)))
-        (or (or (or (Char.= c \?) (Char.= c \!))
-                (or (Char.= c \>) (Char.= c \<)))
-            (or (or (Char.= c \=) (Char.= c \_)) (Char.= c \:)))))
+    (or
+      (or (or (Char.= c \+) (Char.= c \-)) (or (Char.= c \*) (Char.= c \/)))
+      (or
+        (or (or (Char.= c \?) (Char.= c \!)) (or (Char.= c \>) (Char.= c \<)))
+        (or (or (Char.= c \=) (Char.= c \_)) (Char.= c \:)))))
 
   (private high-ascii?)
   (hidden high-ascii?)
@@ -278,7 +281,7 @@ you need it.")
       (for [i 0 count]
         (set! acc
               (Int.+ (Int.* acc 16)
-                (hex-value (String.char-at src (Int.+ pos i))))))
+                     (hex-value (String.char-at src (Int.+ pos i))))))
       acc))
 
   (private push-utf8-bytes)
@@ -293,34 +296,46 @@ specify codepoints rather than raw bytes.")
         (let-do [out bytes]
           (set! out
                 (Array.push-back out
-                  (Byte.from-int (Int.bit-or 192 (Int.bit-shift-right cp 6)))))
+                                 (Byte.from-int
+                                   (Int.bit-or 192 (Int.bit-shift-right cp 6)))))
           (Array.push-back out
-            (Byte.from-int (Int.bit-or 128 (Int.bit-and cp 63)))))
+                           (Byte.from-int (Int.bit-or 128 (Int.bit-and cp 63)))))
       (Int.< cp 65536)
         (let-do [out bytes]
           (set! out
                 (Array.push-back out
-                  (Byte.from-int (Int.bit-or 224 (Int.bit-shift-right cp 12)))))
+                                 (Byte.from-int
+                                   (Int.bit-or 224 (Int.bit-shift-right cp 12)))))
           (set! out
                 (Array.push-back out
-                  (Byte.from-int (Int.bit-or 128
-                      (Int.bit-and (Int.bit-shift-right cp 6) 63)))))
+                                 (Byte.from-int
+                                   (Int.bit-or 128
+                                               (Int.bit-and (Int.bit-shift-right cp
+                                                                                 6)
+                                                            63)))))
           (Array.push-back out
-            (Byte.from-int (Int.bit-or 128 (Int.bit-and cp 63)))))
+                           (Byte.from-int (Int.bit-or 128 (Int.bit-and cp 63)))))
       (let-do [out bytes]
         (set! out
               (Array.push-back out
-                (Byte.from-int (Int.bit-or 240 (Int.bit-shift-right cp 18)))))
+                               (Byte.from-int
+                                 (Int.bit-or 240 (Int.bit-shift-right cp 18)))))
         (set! out
               (Array.push-back out
-                (Byte.from-int (Int.bit-or 128
-                    (Int.bit-and (Int.bit-shift-right cp 12) 63)))))
+                               (Byte.from-int
+                                 (Int.bit-or 128
+                                             (Int.bit-and (Int.bit-shift-right cp
+                                                                               12)
+                                                          63)))))
         (set! out
               (Array.push-back out
-                (Byte.from-int (Int.bit-or 128
-                    (Int.bit-and (Int.bit-shift-right cp 6) 63)))))
+                               (Byte.from-int
+                                 (Int.bit-or 128
+                                             (Int.bit-and (Int.bit-shift-right cp
+                                                                               6)
+                                                          63)))))
         (Array.push-back out
-          (Byte.from-int (Int.bit-or 128 (Int.bit-and cp 63)))))))
+                         (Byte.from-int (Int.bit-or 128 (Int.bit-and cp 63)))))))
 
   (private push-byte)
   (hidden push-byte)
@@ -335,7 +350,7 @@ specify codepoints rather than raw bytes.")
       (for [i digit-start digit-end]
         (set! acc
               (Long.+ (Long.* acc b-long)
-                (Long.from-int (hex-value (String.char-at src i))))))
+                      (Long.from-int (hex-value (String.char-at src i))))))
       (if negate (Long.neg acc) acc)))
 
   (private is-base-digit?)
@@ -361,7 +376,8 @@ there is no exponent here.")
           pos
           (let-do [p (Int.inc pos)]
             (when (and (Int.< p len)
-                (let [c (String.char-at src p)] (or (Char.= c \+) (Char.= c \-))))
+                       (let [c (String.char-at src p)]
+                         (or (Char.= c \+) (Char.= c \-))))
               (set! p (Int.inc p)))
             (let-do [digits-start p]
               (while-do (and (Int.< p len) (digit? (String.char-at src p)))
@@ -371,336 +387,320 @@ there is no exponent here.")
   (private number)
   (hidden number)
   (defn number []
-    (Parser.init (fn [src len cur]
-                   (let-do [start @(Cursor.pos cur)
-                       pos start
-                       negate false]
-                     (when-do (and (Int.< pos len)
-                         (Char.= (String.char-at src pos) \-))
-                       (set! negate true)
-                       (set! pos (Int.inc pos)))
-                     (let-do [base 10
-                         digit-start pos]
-                       (when (and (Int.<= (Int.+ pos 2) len)
-                           (Char.= (String.char-at src pos) \0))
-                         (let [c1 (String.char-at src (Int.inc pos))]
-                           (cond
-                             (Char.= c1 \x)
-                               (do
-                                 (set! base 16)
-                                 (set! pos (Int.+ pos 2))
-                                 (set! digit-start pos))
-                             (Char.= c1 \b)
-                               (do
-                                 (set! base 2)
-                                 (set! pos (Int.+ pos 2))
-                                 (set! digit-start pos))
-                             ())))
-                       (let-do [int-end pos]
-                         (while-do (and (Int.< int-end len)
+    (Parser.init
+      (fn [src len cur]
+        (let-do [start @(Cursor.pos cur)
+                 pos start
+                 negate false]
+          (when-do (and (Int.< pos len) (Char.= (String.char-at src pos) \-))
+            (set! negate true)
+            (set! pos (Int.inc pos)))
+          (let-do [base 10
+                   digit-start pos]
+            (when (and (Int.<= (Int.+ pos 2) len)
+                       (Char.= (String.char-at src pos) \0))
+              (let [c1 (String.char-at src (Int.inc pos))]
+                (cond
+                  (Char.= c1 \x)
+                    (do
+                      (set! base 16)
+                      (set! pos (Int.+ pos 2))
+                      (set! digit-start pos))
+                  (Char.= c1 \b)
+                    (do
+                      (set! base 2)
+                      (set! pos (Int.+ pos 2))
+                      (set! digit-start pos))
+                  ())))
+            (let-do [int-end pos]
+              (while-do (and (Int.< int-end len)
                              (is-base-digit? (String.char-at src int-end) base))
-                           (set! int-end (Int.inc int-end)))
-                         (set! pos int-end)
-                         (if (Int.= pos digit-start)
-                           (Reply.ErrEmpty (ParseErr.expected-at cur @"number"))
-                           (let-do [int-value (parse-digits-from src
-                                 digit-start
-                                 int-end
-                                 base
-                                 negate)
-                               next-c (if (Int.< pos len)
-                                 (String.char-at src pos)
-                                 \space)]
-                             (cond
-                               (Char.= next-c \.)
-                                 (let-do [frac-start (Int.inc pos)
-                                     frac-end frac-start]
-                                   (while-do (and (Int.< frac-end len)
+                (set! int-end (Int.inc int-end)))
+              (set! pos int-end)
+              (if (Int.= pos digit-start)
+                (Reply.ErrEmpty (ParseErr.expected-at cur @"number"))
+                (let-do [int-value (parse-digits-from src
+                                                      digit-start
+                                                      int-end
+                                                      base
+                                                      negate)
+                         next-c (if (Int.< pos len)
+                           (String.char-at src pos)
+                           \space)]
+                  (cond
+                    (Char.= next-c \.)
+                      (let-do [frac-start (Int.inc pos)
+                               frac-end frac-start]
+                        (while-do (and (Int.< frac-end len)
                                        (digit? (String.char-at src frac-end)))
-                                     (set! frac-end (Int.inc frac-end)))
-                                   (if (Int.= frac-end frac-start)
-                                     (Reply.ErrConsumed (ParseErr.expected-at cur
-                                         @"fractional digits"))
-                                     (let-do [exp-end (scan-exponent src
-                                           len
-                                           frac-end)
-                                         post exp-end
-                                         is-float false]
-                                       (when-do (and (Int.< post len)
-                                           (Char.= (String.char-at src post) \f))
-                                         (set! is-float true)
-                                         (set! post (Int.inc post)))
-                                       (let [num-text (String.byte-slice src
-                                             start
-                                             exp-end)]
-                                         (match (Double.from-string &num-text)
-                                           (Maybe.Just d)
-                                             (Reply.OkConsumed (if is-float
-                                                 (Form.Flt (Double.to-float d))
-                                                 (Form.Dbl d))
-                                               (Cursor.advance-by cur
-                                                 (Int.- post start)
-                                                 false))
-                                           (Maybe.Nothing)
-                                             (Reply.ErrConsumed (ParseErr.expected-at cur
-                                                 (if is-float @"float" @"double"))))))))
-                               (or (Char.= next-c \e) (Char.= next-c \E))
-                                 (let-do [exp-end (scan-exponent src len pos)]
-                                   (if (Int.= exp-end pos)
-                                     (Reply.OkConsumed (Form.Itg (Long.to-int int-value))
-                                       (Cursor.advance-by cur
-                                         (Int.- pos start)
-                                         false))
-                                     (let-do [post exp-end
-                                         is-float false]
-                                       (when-do (and (Int.< post len)
-                                           (Char.= (String.char-at src post) \f))
-                                         (set! is-float true)
-                                         (set! post (Int.inc post)))
-                                       (let [num-text (String.byte-slice src
-                                             start
-                                             exp-end)]
-                                         (match (Double.from-string &num-text)
-                                           (Maybe.Just d)
-                                             (Reply.OkConsumed (if is-float
-                                                 (Form.Flt (Double.to-float d))
-                                                 (Form.Dbl d))
-                                               (Cursor.advance-by cur
-                                                 (Int.- post start)
-                                                 false))
-                                           (Maybe.Nothing)
-                                             (Reply.ErrConsumed (ParseErr.expected-at cur
-                                                 (if is-float @"float" @"double"))))))))
-                               (Char.= next-c \b)
-                                 (Reply.OkConsumed (Form.Byt (Byte.from-int (Long.to-int int-value)))
-                                   (Cursor.advance-by cur
-                                     (Int.- (Int.inc pos) start)
-                                     false))
-                               (Char.= next-c \l)
-                                 (Reply.OkConsumed (Form.Lng int-value)
-                                   (Cursor.advance-by cur
-                                     (Int.- (Int.inc pos) start)
-                                     false))
-                               (Char.= next-c \f)
-                                 (let [num-text (String.byte-slice src start pos)]
-                                   (match (Double.from-string &num-text)
-                                     (Maybe.Just d)
-                                       (Reply.OkConsumed (Form.Flt (Double.to-float d))
-                                         (Cursor.advance-by cur
-                                           (Int.- (Int.inc pos) start)
-                                           false))
-                                     (Maybe.Nothing)
-                                       (Reply.ErrConsumed (ParseErr.expected-at cur
-                                           @"float"))))
-                               (Reply.OkConsumed (Form.Itg (Long.to-int int-value))
-                                 (Cursor.advance-by cur (Int.- pos start) false)))))))))))
+                          (set! frac-end (Int.inc frac-end)))
+                        (if (Int.= frac-end frac-start)
+                          (Reply.ErrConsumed
+                            (ParseErr.expected-at cur @"fractional digits"))
+                          (let-do [exp-end (scan-exponent src len frac-end)
+                                   post exp-end
+                                   is-float false]
+                            (when-do (and (Int.< post len)
+                                          (Char.= (String.char-at src post) \f))
+                              (set! is-float true)
+                              (set! post (Int.inc post)))
+                            (let [num-text (String.byte-slice src start exp-end)]
+                              (match (Double.from-string &num-text)
+                                (Maybe.Just d)
+                                  (Reply.OkConsumed
+                                    (if is-float
+                                      (Form.Flt (Double.to-float d))
+                                      (Form.Dbl d))
+                                    (Cursor.advance-by cur
+                                                       (Int.- post start)
+                                                       false))
+                                (Maybe.Nothing)
+                                  (Reply.ErrConsumed
+                                    (ParseErr.expected-at cur
+                                                          (if is-float
+                                                            @"float"
+                                                            @"double"))))))))
+                    (or (Char.= next-c \e) (Char.= next-c \E))
+                      (let-do [exp-end (scan-exponent src len pos)]
+                        (if (Int.= exp-end pos)
+                          (Reply.OkConsumed (Form.Itg (Long.to-int int-value))
+                                            (Cursor.advance-by cur
+                                                               (Int.- pos start)
+                                                               false))
+                          (let-do [post exp-end
+                                   is-float false]
+                            (when-do (and (Int.< post len)
+                                          (Char.= (String.char-at src post) \f))
+                              (set! is-float true)
+                              (set! post (Int.inc post)))
+                            (let [num-text (String.byte-slice src start exp-end)]
+                              (match (Double.from-string &num-text)
+                                (Maybe.Just d)
+                                  (Reply.OkConsumed
+                                    (if is-float
+                                      (Form.Flt (Double.to-float d))
+                                      (Form.Dbl d))
+                                    (Cursor.advance-by cur
+                                                       (Int.- post start)
+                                                       false))
+                                (Maybe.Nothing)
+                                  (Reply.ErrConsumed
+                                    (ParseErr.expected-at cur
+                                                          (if is-float
+                                                            @"float"
+                                                            @"double"))))))))
+                    (Char.= next-c \b)
+                      (Reply.OkConsumed
+                        (Form.Byt (Byte.from-int (Long.to-int int-value)))
+                        (Cursor.advance-by cur (Int.- (Int.inc pos) start) false))
+                    (Char.= next-c \l)
+                      (Reply.OkConsumed (Form.Lng int-value)
+                                        (Cursor.advance-by cur
+                                                           (Int.- (Int.inc pos)
+                                                                  start)
+                                                           false))
+                    (Char.= next-c \f)
+                      (let [num-text (String.byte-slice src start pos)]
+                        (match (Double.from-string &num-text)
+                          (Maybe.Just d)
+                            (Reply.OkConsumed (Form.Flt (Double.to-float d))
+                                              (Cursor.advance-by cur
+                                                                 (Int.- (Int.inc pos)
+                                                                        start)
+                                                                 false))
+                          (Maybe.Nothing)
+                            (Reply.ErrConsumed (ParseErr.expected-at cur
+                                                                     @"float"))))
+                    (Reply.OkConsumed (Form.Itg (Long.to-int int-value))
+                                      (Cursor.advance-by cur
+                                                         (Int.- pos start)
+                                                         false)))))))))))
 
   (private string-)
   (hidden string-)
   (defn string- []
-    (Parser.init (fn [src len cur]
-                   (let [start @(Cursor.pos cur)]
-                     (if (or (Int.>= start len)
-                         (not (Char.= (String.char-at src start) \")))
-                       (Reply.ErrEmpty (ParseErr.expected-at cur @"string"))
-                       (let-do [c (Cursor.advance cur \")
-                           bytes (the (Array Byte) [])
-                           going true
-                           err false]
-                         (while-do (and going (not err))
-                           (if (Int.>= @(Cursor.pos &c) len)
-                             (set! err true)
-                             (let [ch (String.char-at src @(Cursor.pos &c))]
-                               (cond
-                                 (Char.= ch \")
-                                   (do
-                                     (set! c (Cursor.advance &c ch))
-                                     (set! going false))
-                                 (Char.= ch \\)
-                                   (if (Int.>= (Int.+ @(Cursor.pos &c) 1) len)
-                                     (set! err true)
-                                     (let [esc (String.char-at src
-                                           (Int.+ @(Cursor.pos &c) 1))]
-                                       (cond
-                                         (Char.= esc \n)
-                                           (do
-                                             (set! bytes
-                                               (push-byte bytes \newline))
-                                             (set! c
-                                               (Cursor.advance-by &c 2 false)))
-                                         (Char.= esc \t)
-                                           (do
-                                             (set! bytes (push-byte bytes \tab))
-                                             (set! c
-                                               (Cursor.advance-by &c 2 false)))
-                                         (Char.= esc \r)
-                                           (do
-                                             (set! bytes
-                                               (push-byte bytes \return))
-                                             (set! c
-                                               (Cursor.advance-by &c 2 false)))
-                                         (Char.= esc \b)
-                                           (do
-                                             (set! bytes
-                                               (push-byte bytes \backspace))
-                                             (set! c
-                                               (Cursor.advance-by &c 2 false)))
-                                         (Char.= esc \f)
-                                           (do
-                                             (set! bytes
-                                               (push-byte bytes \formfeed))
-                                             (set! c
-                                               (Cursor.advance-by &c 2 false)))
-                                         (Char.= esc \v)
-                                           (do
-                                             (set! bytes
-                                               (Array.push-back bytes
-                                                 (Byte.from-int 11)))
-                                             (set! c
-                                               (Cursor.advance-by &c 2 false)))
-                                         (Char.= esc \a)
-                                           (do
-                                             (set! bytes
-                                               (Array.push-back bytes
-                                                 (Byte.from-int 7)))
-                                             (set! c
-                                               (Cursor.advance-by &c 2 false)))
-                                         (or (Char.= esc \\)
-                                           (or (Char.= esc \") (Char.= esc \')))
-                                           (do
-                                             (set! bytes (push-byte bytes esc))
-                                             (set! c
-                                               (Cursor.advance-by &c 2 false)))
-                                         (Char.= esc \x)
-                                           (let-do [digits-start (Int.+ @(Cursor.pos &c)
-                                                 2)
-                                               end digits-start]
-                                             (while-do (and (Int.< end len)
+    (Parser.init
+      (fn [src len cur]
+        (let [start @(Cursor.pos cur)]
+          (if (or (Int.>= start len)
+                  (not (Char.= (String.char-at src start) \")))
+            (Reply.ErrEmpty (ParseErr.expected-at cur @"string"))
+            (let-do [c (Cursor.advance cur \")
+                     bytes (the (Array Byte) [])
+                     going true
+                     err false]
+              (while-do (and going (not err))
+                (if (Int.>= @(Cursor.pos &c) len)
+                  (set! err true)
+                  (let [ch (String.char-at src @(Cursor.pos &c))]
+                    (cond
+                      (Char.= ch \")
+                        (do (set! c (Cursor.advance &c ch)) (set! going false))
+                      (Char.= ch \\)
+                        (if (Int.>= (Int.+ @(Cursor.pos &c) 1) len)
+                          (set! err true)
+                          (let [esc (String.char-at src
+                                                    (Int.+ @(Cursor.pos &c) 1))]
+                            (cond
+                              (Char.= esc \n)
+                                (do
+                                  (set! bytes (push-byte bytes \newline))
+                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (Char.= esc \t)
+                                (do
+                                  (set! bytes (push-byte bytes \tab))
+                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (Char.= esc \r)
+                                (do
+                                  (set! bytes (push-byte bytes \return))
+                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (Char.= esc \b)
+                                (do
+                                  (set! bytes (push-byte bytes \backspace))
+                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (Char.= esc \f)
+                                (do
+                                  (set! bytes (push-byte bytes \formfeed))
+                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (Char.= esc \v)
+                                (do
+                                  (set! bytes
+                                        (Array.push-back bytes
+                                                         (Byte.from-int 11)))
+                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (Char.= esc \a)
+                                (do
+                                  (set! bytes
+                                        (Array.push-back bytes (Byte.from-int 7)))
+                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (or (Char.= esc \\)
+                                  (or (Char.= esc \") (Char.= esc \')))
+                                (do
+                                  (set! bytes (push-byte bytes esc))
+                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (Char.= esc \x)
+                                (let-do [digits-start (Int.+ @(Cursor.pos &c) 2)
+                                         end digits-start]
+                                  (while-do (and (Int.< end len)
                                                  (hex-digit? (String.char-at src
-                                                     end)))
-                                               (set! end (Int.inc end)))
-                                             (if (Int.> end digits-start)
-                                               (do
-                                                 (set! bytes
-                                                   (Array.push-back bytes
-                                                     (Byte.from-int (Int.bit-and 255
-                                                         (read-hex src
-                                                           digits-start
-                                                           (Int.- end
-                                                             digits-start))))))
-                                                 (set! c
-                                                   (Cursor.advance-by &c
-                                                     (Int.- end @(Cursor.pos &c))
-                                                     false)))
-                                               (set! err true)))
-                                         (Char.= esc \u)
-                                           (if (Int.>= (Int.+ @(Cursor.pos &c) 6)
-                                               (Int.inc len))
-                                             (set! err true)
-                                             (do
-                                               (set! bytes
-                                                 (push-utf8-bytes bytes
-                                                   (read-hex src
-                                                     (Int.+ @(Cursor.pos &c) 2)
-                                                     4)))
-                                               (set! c
-                                                 (Cursor.advance-by &c 6 false))))
-                                         (Char.= esc \U)
-                                           (if (Int.>= (Int.+ @(Cursor.pos &c)
-                                                 10)
-                                               (Int.inc len))
-                                             (set! err true)
-                                             (do
-                                               (set! bytes
-                                                 (push-utf8-bytes bytes
-                                                   (read-hex src
-                                                     (Int.+ @(Cursor.pos &c) 2)
-                                                     8)))
-                                               (set! c
-                                                 (Cursor.advance-by &c 10 false))))
-                                         (do
-                                           (set! bytes (push-byte bytes \\))
-                                           (set! bytes (push-byte bytes esc))
-                                           (set! c
-                                             (Cursor.advance-by &c 2 false))))))
-                                 (do
-                                   (set! bytes (push-byte bytes ch))
-                                   (set! c (Cursor.advance &c ch)))))))
-                         (if err
-                           (Reply.ErrConsumed (ParseErr.expected-at &c
-                               @"closing quote"))
-                           (Reply.OkConsumed (Form.Str (String.from-bytes &bytes))
-                             c))))))))
+                                                                             end)))
+                                    (set! end (Int.inc end)))
+                                  (if (Int.> end digits-start)
+                                    (do
+                                      (set! bytes
+                                            (Array.push-back bytes
+                                                             (Byte.from-int
+                                                               (Int.bit-and 255
+                                                                            (read-hex src
+                                                                                      digits-start
+                                                                                      (Int.- end
+                                                                                             digits-start))))))
+                                      (set! c
+                                            (Cursor.advance-by &c
+                                                               (Int.- end
+                                                                      @(Cursor.pos &c))
+                                                               false)))
+                                    (set! err true)))
+                              (Char.= esc \u)
+                                (if (Int.>= (Int.+ @(Cursor.pos &c) 6)
+                                            (Int.inc len))
+                                  (set! err true)
+                                  (do
+                                    (set! bytes
+                                          (push-utf8-bytes bytes
+                                                           (read-hex src
+                                                                     (Int.+ @(Cursor.pos &c)
+                                                                            2)
+                                                                     4)))
+                                    (set! c (Cursor.advance-by &c 6 false))))
+                              (Char.= esc \U)
+                                (if (Int.>= (Int.+ @(Cursor.pos &c) 10)
+                                            (Int.inc len))
+                                  (set! err true)
+                                  (do
+                                    (set! bytes
+                                          (push-utf8-bytes bytes
+                                                           (read-hex src
+                                                                     (Int.+ @(Cursor.pos &c)
+                                                                            2)
+                                                                     8)))
+                                    (set! c (Cursor.advance-by &c 10 false))))
+                              (do
+                                (set! bytes (push-byte bytes \\))
+                                (set! bytes (push-byte bytes esc))
+                                (set! c (Cursor.advance-by &c 2 false))))))
+                      (do
+                        (set! bytes (push-byte bytes ch))
+                        (set! c (Cursor.advance &c ch)))))))
+              (if err
+                (Reply.ErrConsumed (ParseErr.expected-at &c @"closing quote"))
+                (Reply.OkConsumed (Form.Str (String.from-bytes &bytes)) c))))))))
 
   (private raw-string)
   (hidden raw-string)
   (defn raw-string []
-    (Parser.init (fn [src len cur]
-                   (let [start @(Cursor.pos cur)]
-                     (if (or (Int.>= (Int.+ start 1) len)
-                         (or (not (Char.= (String.char-at src start) \r))
-                           (not (Char.= (String.char-at src (Int.+ start 1)) \"))))
-                       (Reply.ErrEmpty (ParseErr.expected-at cur @"raw string"))
-                       (let-do [c (Cursor.advance-by cur 2 false)
-                           chars []
-                           going true
-                           err false]
-                         (while-do (and going (not err))
-                           (if (Int.>= @(Cursor.pos &c) len)
-                             (set! err true)
-                             (let [ch (String.char-at src @(Cursor.pos &c))]
-                               (cond
-                                 (Char.= ch \")
-                                   (if (and (Int.< (Int.inc @(Cursor.pos &c))
-                                         len)
-                                       (Char.= (String.char-at src
-                                           (Int.inc @(Cursor.pos &c)))
-                                         \"))
-                                     (do
-                                       (set! chars (Array.push-back chars \"))
-                                       (set! c (Cursor.advance-by &c 2 false)))
-                                     (do
-                                       (set! c (Cursor.advance &c ch))
-                                       (set! going false)))
-                                 (do
-                                   (set! chars (Array.push-back chars ch))
-                                   (set! c (Cursor.advance &c ch)))))))
-                         (if err
-                           (Reply.ErrConsumed (ParseErr.expected-at &c
-                               @"closing quote"))
-                           (Reply.OkConsumed (Form.Str (String.from-chars &chars))
-                             c))))))))
+    (Parser.init
+      (fn [src len cur]
+        (let [start @(Cursor.pos cur)]
+          (if (or (Int.>= (Int.+ start 1) len)
+                  (or
+                    (not (Char.= (String.char-at src start) \r))
+                    (not (Char.= (String.char-at src (Int.+ start 1)) \"))))
+            (Reply.ErrEmpty (ParseErr.expected-at cur @"raw string"))
+            (let-do [c (Cursor.advance-by cur 2 false)
+                     chars []
+                     going true
+                     err false]
+              (while-do (and going (not err))
+                (if (Int.>= @(Cursor.pos &c) len)
+                  (set! err true)
+                  (let [ch (String.char-at src @(Cursor.pos &c))]
+                    (cond
+                      (Char.= ch \")
+                        (if (and (Int.< (Int.inc @(Cursor.pos &c)) len)
+                                 (Char.=
+                                   (String.char-at src
+                                                   (Int.inc @(Cursor.pos &c)))
+                                   \"))
+                          (do
+                            (set! chars (Array.push-back chars \"))
+                            (set! c (Cursor.advance-by &c 2 false)))
+                          (do (set! c (Cursor.advance &c ch)) (set! going false)))
+                      (do
+                        (set! chars (Array.push-back chars ch))
+                        (set! c (Cursor.advance &c ch)))))))
+              (if err
+                (Reply.ErrConsumed (ParseErr.expected-at &c @"closing quote"))
+                (Reply.OkConsumed (Form.Str (String.from-chars &chars)) c))))))))
 
   (private pattern-)
   (hidden pattern-)
   (defn pattern- []
-    (Parser.init (fn [src len cur]
-                   (let [start @(Cursor.pos cur)]
-                     (if (or (Int.>= (Int.+ start 1) len)
-                         (or (not (Char.= (String.char-at src start) \#))
-                           (not (Char.= (String.char-at src (Int.+ start 1)) \"))))
-                       (Reply.ErrEmpty (ParseErr.expected-at cur @"pattern"))
-                       (let-do [c (Cursor.advance-by cur 2 false)
-                           chars []
-                           going true
-                           err false]
-                         (while-do (and going (not err))
-                           (if (Int.>= @(Cursor.pos &c) len)
-                             (set! err true)
-                             (let [ch (String.char-at src @(Cursor.pos &c))]
-                               (cond
-                                 (Char.= ch \")
-                                   (do
-                                     (set! c (Cursor.advance &c ch))
-                                     (set! going false))
-                                 (do
-                                   (set! chars (Array.push-back chars ch))
-                                   (set! c (Cursor.advance &c ch)))))))
-                         (if err
-                           (Reply.ErrConsumed (ParseErr.expected-at &c
-                               @"closing quote"))
-                           (Reply.OkConsumed (Form.Pat (String.from-chars &chars))
-                             c))))))))
+    (Parser.init
+      (fn [src len cur]
+        (let [start @(Cursor.pos cur)]
+          (if (or (Int.>= (Int.+ start 1) len)
+                  (or
+                    (not (Char.= (String.char-at src start) \#))
+                    (not (Char.= (String.char-at src (Int.+ start 1)) \"))))
+            (Reply.ErrEmpty (ParseErr.expected-at cur @"pattern"))
+            (let-do [c (Cursor.advance-by cur 2 false)
+                     chars []
+                     going true
+                     err false]
+              (while-do (and going (not err))
+                (if (Int.>= @(Cursor.pos &c) len)
+                  (set! err true)
+                  (let [ch (String.char-at src @(Cursor.pos &c))]
+                    (cond
+                      (Char.= ch \")
+                        (do (set! c (Cursor.advance &c ch)) (set! going false))
+                      (do
+                        (set! chars (Array.push-back chars ch))
+                        (set! c (Cursor.advance &c ch)))))))
+              (if err
+                (Reply.ErrConsumed (ParseErr.expected-at &c @"closing quote"))
+                (Reply.OkConsumed (Form.Pat (String.from-chars &chars)) c))))))))
 
   (private named-char)
   (hidden named-char)
@@ -720,26 +720,31 @@ there is no exponent here.")
   (defn unicode-char []
     (Parser.bind (Parser.byte \u)
                  (fn [_]
-                   (Parser.bind (Parser.slice-of (Parser.count 4
-                         (Parser.satisfy (fn [c] (hex-digit? c)) @"hex digit")))
+                   (Parser.bind
+                     (Parser.slice-of
+                       (Parser.count 4
+                                     (Parser.satisfy (fn [c] (hex-digit? c))
+                                                     @"hex digit")))
                      (fn [hex]
-                       (Parser.pure (Form.Chr (Char.from-int (read-hex &hex 0 4)))))))))
+                       (Parser.pure
+                         (Form.Chr (Char.from-int (read-hex &hex 0 4)))))))))
 
   (private char-)
   (hidden char-)
   (defn char- []
     (Parser.bind (Parser.byte \\)
                  (fn [_]
-                   (Parser.choice [
-                       (Parser.try (unicode-char))
-                       (Parser.bind (Parser.take-while1 (fn [c] (sym-byte? c)))
-                         (fn [name]
-                           (if (= 1 (String.length &name))
-                             (Parser.pure (Form.Chr (String.char-at &name 0)))
-                             (match (named-char @&name)
-                               (Maybe.Just c) (Parser.pure (Form.Chr c))
-                               (Maybe.Nothing) (Parser.fail @"named char")))))
-                       (Parser.map (Parser.any-byte) (fn [c] (Form.Chr c)))]))))
+                   (Parser.choice
+                     [(Parser.try (unicode-char))
+                      (Parser.bind
+                        (Parser.take-while1 (fn [c] (sym-byte? c)))
+                        (fn [name]
+                          (if (= 1 (String.length &name))
+                            (Parser.pure (Form.Chr (String.char-at &name 0)))
+                            (match (named-char @&name)
+                              (Maybe.Just c) (Parser.pure (Form.Chr c))
+                              (Maybe.Nothing) (Parser.fail @"named char")))))
+                      (Parser.map (Parser.any-byte) (fn [c] (Form.Chr c)))]))))
 
   (private segment)
   (hidden segment)
@@ -748,31 +753,33 @@ there is no exponent here.")
   (private symbol-)
   (hidden symbol-)
   (defn symbol- []
-    (Parser.map (Parser.label @"symbol"
-                  (Parser.seq (segment)
-                    (Parser.many (Parser.bind (Parser.byte \.)
-                        (fn [_] (segment))))))
-                (fn [outer]
-                  (let [first @(Pair.a &outer)
-                      rest @(Pair.b &outer)]
-                    (let-do [segs [first]]
-                      (for [i 0 (Array.length &rest)]
-                        (set! segs
-                          (Array.push-back segs @(Array.unsafe-nth &rest i))))
-                      (if (Int.= 1 (Array.length &segs))
-                        (let [only (Array.unsafe-nth &segs 0)]
-                          (cond
-                            (= only "true") (Form.Bol true)
-                            (= only "false") (Form.Bol false)
-                            (Form.Sym segs)))
-                        (Form.Sym segs)))))))
+    (Parser.map
+      (Parser.label @"symbol"
+                    (Parser.seq (segment)
+                                (Parser.many
+                                  (Parser.bind (Parser.byte \.)
+                                               (fn [_] (segment))))))
+      (fn [outer]
+        (let [first @(Pair.a &outer)
+              rest @(Pair.b &outer)]
+          (let-do [segs [first]]
+            (for [i 0 (Array.length &rest)]
+              (set! segs (Array.push-back segs @(Array.unsafe-nth &rest i))))
+            (if (Int.= 1 (Array.length &segs))
+              (let [only (Array.unsafe-nth &segs 0)]
+                (cond
+                  (= only "true") (Form.Bol true)
+                  (= only "false") (Form.Bol false)
+                  (Form.Sym segs)))
+              (Form.Sym segs)))))))
 
   (private comment-)
   (hidden comment-)
   (defn comment- []
-    (Parser.map (Parser.then (Parser.byte \;)
-                  (Parser.take-while (fn [c] (not (Char.= c \newline)))))
-                (fn [s] (Form.Cmt s))))
+    (Parser.map
+      (Parser.then (Parser.byte \;)
+                   (Parser.take-while (fn [c] (not (Char.= c \newline)))))
+      (fn [s] (Form.Cmt s))))
 
   (private *form*)
   (def *form* (the (Parser Located) (Parser.placeholder)))
@@ -835,50 +842,53 @@ there is no exponent here.")
   (hidden many-forms)
   (defn many-forms []
     (Parser.then (skip-ws)
-                 (Parser.many (Parser.map (Parser.before (Parser.recurse &*form*)
-                       (skip-ws))
+                 (Parser.many
+                   (Parser.map
+                     (Parser.before (Parser.recurse &*form*) (skip-ws))
                      (fn [c] (Box.init c))))))
 
   (private list-)
   (hidden list-)
   (defn list- []
-    (Parser.map (Parser.between (Parser.byte \() (Parser.byte \)) (many-forms))
-                (fn [items] (Form.Lst items))))
+    (Parser.map
+      (Parser.between (Parser.byte \() (Parser.byte \)) (many-forms))
+      (fn [items] (Form.Lst items))))
 
   (private array-)
   (hidden array-)
   (defn array- []
-    (Parser.map (Parser.between (Parser.byte \[) (Parser.byte \]) (many-forms))
-                (fn [items] (Form.Arr items))))
+    (Parser.map
+      (Parser.between (Parser.byte \[) (Parser.byte \]) (many-forms))
+      (fn [items] (Form.Arr items))))
 
   (private static-array)
   (hidden static-array)
   (defn static-array []
-    (Parser.map (Parser.between (Parser.string @"$[")
-                  (Parser.byte \])
-                  (many-forms))
-                (fn [items] (Form.StaticArr items))))
+    (Parser.map
+      (Parser.between (Parser.string @"$[") (Parser.byte \]) (many-forms))
+      (fn [items] (Form.StaticArr items))))
 
   (private dict)
   (hidden dict)
   (defn dict []
-    (Parser.map (Parser.between (Parser.byte \{) (Parser.byte \}) (many-forms))
-                (fn [items] (Form.Dict items))))
+    (Parser.map
+      (Parser.between (Parser.byte \{) (Parser.byte \}) (many-forms))
+      (fn [items] (Form.Dict items))))
 
   (private macro-list)
   (hidden macro-list)
   (defn macro-list [name body]
-    (Form.Lst [
-                (Box.init (Located.init (Form.Sym [@name])
-                    (Info.synthetic)
-                    (Info.synthetic)))
-                (Box.init body)]))
+    (Form.Lst
+      [(Box.init
+         (Located.init (Form.Sym [@name]) (Info.synthetic) (Info.synthetic)))
+       (Box.init body)]))
 
   (private reader-macro)
   (hidden reader-macro)
   (defn reader-macro [open name]
-    (Parser.map (Parser.then (Parser.string open) (Parser.recurse &*form*))
-                (fn [body] (macro-list &name body))))
+    (Parser.map
+      (Parser.then (Parser.string open) (Parser.recurse &*form*))
+      (fn [body] (macro-list &name body))))
 
   (private ref-)
   (hidden ref-)
@@ -916,92 +926,72 @@ there is no exponent here.")
     (match reply
       (Reply.OkConsumed v c)
         (let-do [end (Info.init @(Cursor.pos &c)
-                   @(Cursor.line &c)
-                   @(Cursor.col &c))]
+                                @(Cursor.line &c)
+                                @(Cursor.col &c))]
           (Reply.OkConsumed (Located.init v info end) c))
       (Reply.OkEmpty v c)
         (let-do [end (Info.init @(Cursor.pos &c)
-                   @(Cursor.line &c)
-                   @(Cursor.col &c))]
+                                @(Cursor.line &c)
+                                @(Cursor.col &c))]
           (Reply.OkEmpty (Located.init v info end) c))
       (Reply.ErrConsumed e) (Reply.ErrConsumed e)
       (Reply.ErrEmpty e) (Reply.ErrEmpty e)))
 
   (defn form []
-    (Parser.init (fn [src len cur]
-                   (let [pos @(Cursor.pos cur)]
-                     (if (Int.>= pos len)
-                       (Reply.ErrEmpty (ParseErr.expected-at cur @"a form"))
-                       (let [b (String.char-at src pos)
-                           info (Info.init pos
-                             @(Cursor.line cur)
-                             @(Cursor.col cur))]
-                         (cond
-                           (Char.= b \()
-                             (wrap info (~(Parser.run &*list-cell*) src len cur))
-                           (Char.= b \[)
-                             (wrap info
-                               (~(Parser.run &*array-cell*) src len cur))
-                           (Char.= b \{)
-                             (wrap info (~(Parser.run &*dict-cell*) src len cur))
-                           (Char.= b \$)
-                             (wrap info
-                               (~(Parser.run &*static-array-cell*) src len cur))
-                           (Char.= b \&)
-                             (wrap info (~(Parser.run &*ref-cell*) src len cur))
-                           (Char.= b \~)
-                             (wrap info
-                               (~(Parser.run &*deref-cell*) src len cur))
-                           (Char.= b \@)
-                             (wrap info (~(Parser.run &*copy-cell*) src len cur))
-                           (Char.= b \')
-                             (wrap info
-                               (~(Parser.run &*quote-cell*) src len cur))
-                           (Char.= b \`)
-                             (wrap info
-                               (~(Parser.run &*quasiquote-cell*) src len cur))
-                           (Char.= b \;)
-                             (wrap info
-                               (~(Parser.run &*comment-cell*) src len cur))
-                           (Char.= b \%)
-                             (if (and (Int.< (Int.inc pos) len)
-                                 (Char.= (String.char-at src (Int.inc pos)) \@))
-                               (wrap info
-                                 (~(Parser.run &*unquote-splice-cell*) src
-                                   len
-                                   cur))
-                               (wrap info
-                                 (~(Parser.run &*unquote-cell*) src len cur)))
-                           (Char.= b \")
-                             (wrap info
-                               (~(Parser.run &*string-cell*) src len cur))
-                           (Char.= b \#)
-                             (wrap info
-                               (~(Parser.run &*pattern-cell*) src len cur))
-                           (Char.= b \\)
-                             (wrap info (~(Parser.run &*char-cell*) src len cur))
-                           (Char.= b \r)
-                             (if (and (Int.< (Int.inc pos) len)
-                                 (Char.= (String.char-at src (Int.inc pos)) \"))
-                               (wrap info
-                                 (~(Parser.run &*raw-string-cell*) src len cur))
-                               (wrap info
-                                 (~(Parser.run &*symbol-cell*) src len cur)))
-                           (or (digit? b) (Char.= b \-))
-                             (let [reply (~(Parser.run &*number-cell*) src
-                                   len
-                                   cur)]
-                               (match reply
-                                 (Reply.OkConsumed v c)
-                                   (wrap info (Reply.OkConsumed v c))
-                                 (Reply.OkEmpty v c)
-                                   (wrap info (Reply.OkEmpty v c))
-                                 (Reply.ErrConsumed e)
-                                   (wrap info (Reply.ErrConsumed e))
-                                 (Reply.ErrEmpty _)
-                                   (wrap info
-                                     (~(Parser.run &*symbol-cell*) src len cur))))
-                           (wrap info (~(Parser.run &*symbol-cell*) src len cur)))))))))
+    (Parser.init
+      (fn [src len cur]
+        (let [pos @(Cursor.pos cur)]
+          (if (Int.>= pos len)
+            (Reply.ErrEmpty (ParseErr.expected-at cur @"a form"))
+            (let [b (String.char-at src pos)
+                  info (Info.init pos @(Cursor.line cur) @(Cursor.col cur))]
+              (cond
+                (Char.= b \()
+                  (wrap info (~(Parser.run &*list-cell*) src len cur))
+                (Char.= b \[)
+                  (wrap info (~(Parser.run &*array-cell*) src len cur))
+                (Char.= b \{)
+                  (wrap info (~(Parser.run &*dict-cell*) src len cur))
+                (Char.= b \$)
+                  (wrap info (~(Parser.run &*static-array-cell*) src len cur))
+                (Char.= b \&)
+                  (wrap info (~(Parser.run &*ref-cell*) src len cur))
+                (Char.= b \~)
+                  (wrap info (~(Parser.run &*deref-cell*) src len cur))
+                (Char.= b \@)
+                  (wrap info (~(Parser.run &*copy-cell*) src len cur))
+                (Char.= b \')
+                  (wrap info (~(Parser.run &*quote-cell*) src len cur))
+                (Char.= b \`)
+                  (wrap info (~(Parser.run &*quasiquote-cell*) src len cur))
+                (Char.= b \;)
+                  (wrap info (~(Parser.run &*comment-cell*) src len cur))
+                (Char.= b \%)
+                  (if (and (Int.< (Int.inc pos) len)
+                           (Char.= (String.char-at src (Int.inc pos)) \@))
+                    (wrap info
+                          (~(Parser.run &*unquote-splice-cell*) src len cur))
+                    (wrap info (~(Parser.run &*unquote-cell*) src len cur)))
+                (Char.= b \")
+                  (wrap info (~(Parser.run &*string-cell*) src len cur))
+                (Char.= b \#)
+                  (wrap info (~(Parser.run &*pattern-cell*) src len cur))
+                (Char.= b \\)
+                  (wrap info (~(Parser.run &*char-cell*) src len cur))
+                (Char.= b \r)
+                  (if (and (Int.< (Int.inc pos) len)
+                           (Char.= (String.char-at src (Int.inc pos)) \"))
+                    (wrap info (~(Parser.run &*raw-string-cell*) src len cur))
+                    (wrap info (~(Parser.run &*symbol-cell*) src len cur)))
+                (or (digit? b) (Char.= b \-))
+                  (let [reply (~(Parser.run &*number-cell*) src len cur)]
+                    (match reply
+                      (Reply.OkConsumed v c) (wrap info (Reply.OkConsumed v c))
+                      (Reply.OkEmpty v c) (wrap info (Reply.OkEmpty v c))
+                      (Reply.ErrConsumed e) (wrap info (Reply.ErrConsumed e))
+                      (Reply.ErrEmpty _)
+                        (wrap info (~(Parser.run &*symbol-cell*) src len cur))))
+                (wrap info (~(Parser.run &*symbol-cell*) src len cur)))))))))
 
   (def -init
     (do
@@ -1034,6 +1024,6 @@ there is no exponent here.")
   (doc parse-form "parses exactly one top-level `Form` form. Use
   `parse` for whole-file inputs.")
   (defn parse-form [src]
-    (Parser.parse (Parser.then (skip-ws)
-                    (Parser.before (Parser.recurse &*form*) (skip-ws)))
-                  src)))
+    (Parser.parse
+      (Parser.then (skip-ws) (Parser.before (Parser.recurse &*form*) (skip-ws)))
+      src)))
