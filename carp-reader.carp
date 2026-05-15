@@ -159,15 +159,27 @@ scientific notation: only `digits.digits`).
 
 Tries `Double.str` (`%g`, 6 sig figs) first, which is short and works
 for values the user wrote concisely. Falls back to `%.17g` (full
-round-trip precision). If either uses an exponent, expands to fixed
-decimal with `%.30f` and strips trailing zeros. Appends `.0` when the
+round-trip precision). If either uses an exponent, walks `%.Pf` with
+P growing from 17 up to 330 (which covers the entire IEEE 754
+dynamic range down to denormals near 5e-324) and picks the smallest
+P whose stripped output still round-trips. Appends `.0` when the
 result has no decimal point so it parses as `Double`, not `Int`.")
   (defn double-str [d]
     (let-do [s (Double.str d)]
       (when (or (not (decimal-only? &s)) (not (double-round-trips? &s d)))
         (set! s (Double.format "%.17g" d)))
-      (unless (decimal-only? &s)
-        (set! s (strip-trailing-zeros &(Double.format "%.30f" d))))
+      (when-do (not (decimal-only? &s))
+        (let-do [precs [17 21 25 30 40 50 70 100 150 220 330]
+                 n (Array.length &precs)
+                 i 0]
+          (while-do (Int.< i n)
+            (let-do [p @(Array.unsafe-nth &precs i)
+                     fmt-str (fmt "%%.%df" p)
+                     candidate (strip-trailing-zeros &(Double.format &fmt-str d))]
+              (when-do (double-round-trips? &candidate d)
+                (set! s candidate)
+                (set! i n)))
+            (set! i (Int.inc i)))))
       (if (String.contains? &s \.) s (String.append &s ".0"))))
 
   (defn str [a]
