@@ -126,23 +126,48 @@ strings round-trip readably.")
       (Maybe.Just d2) (Double.= d2 d)
       (Maybe.Nothing) false))
 
+  (private decimal-only?)
+  (hidden decimal-only?)
+  (defn decimal-only? [s]
+    (not (or (String.contains? s \e) (String.contains? s \E))))
+
+  (private strip-trailing-zeros)
+  (hidden strip-trailing-zeros)
+  (doc strip-trailing-zeros "for a decimal string containing `.`, drops
+trailing `0` digits but keeps at least one digit after the decimal point
+so the result remains lexically a `Double` (e.g. `\"10.000\"` becomes
+`\"10.0\"`, not `\"10.\"`).")
+  (defn strip-trailing-zeros [s]
+    (if (not (String.contains? s \.))
+      @s
+      (let-do [bs (String.chars s)
+               n (Array.length &bs)
+               end n]
+        (while-do (and (Int.> end 2)
+                       (Char.= @(Array.unsafe-nth &bs (Int.dec end)) \0))
+          (set! end (Int.dec end)))
+        (when (Char.= @(Array.unsafe-nth &bs (Int.dec end)) \.)
+          (set! end (Int.inc end)))
+        (String.from-chars &(Array.prefix &bs end)))))
+
   (private double-str)
   (hidden double-str)
-  (doc double-str "renders a `Double` so it round-trips and stays
-lexically a double. `Double.str` uses `%g` (6 sig figs by default),
-which loses precision for values like `3.14159265358979`. We try that
-first; if it doesn't parse back to the same `Double`, fall back to
-`%.17g` (17 sig figs guarantees exact round-trip for IEEE 754).
-Finally, append `.0` when the result has no decimal point or exponent,
-so the source reads as a double instead of an int.")
+  (doc double-str "renders a `Double` as a decimal literal that
+round-trips and parses with Carp's lexer (which does NOT accept
+scientific notation: only `digits.digits`).
+
+Tries `Double.str` (`%g`, 6 sig figs) first, which is short and works
+for values the user wrote concisely. Falls back to `%.17g` (full
+round-trip precision). If either uses an exponent, expands to fixed
+decimal with `%.30f` and strips trailing zeros. Appends `.0` when the
+result has no decimal point so it parses as `Double`, not `Int`.")
   (defn double-str [d]
     (let-do [s (Double.str d)]
-      (unless (double-round-trips? &s d) (set! s (Double.format "%.17g" d)))
-      (if (or
-          (String.contains? &s \.)
-          (or (String.contains? &s \e) (String.contains? &s \E)))
-        s
-        (String.append &s ".0"))))
+      (when (or (not (decimal-only? &s)) (not (double-round-trips? &s d)))
+        (set! s (Double.format "%.17g" d)))
+      (when (not (decimal-only? &s))
+        (set! s (strip-trailing-zeros &(Double.format "%.30f" d))))
+      (if (String.contains? &s \.) s (String.append &s ".0"))))
 
   (defn str [a]
     (match-ref a

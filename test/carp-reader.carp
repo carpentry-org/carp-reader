@@ -168,6 +168,13 @@
     "3.14159265358979"
     &(Located.str &(first-form "3.14159265358979"))
     "high-precision Double round-trips bit-exact")
+  ; Carp's lexer doesn't accept scientific notation (`5e-15`), so very
+  ; small doubles get rendered as plain decimal even at the cost of a
+  ; long output.
+  (assert-equal t
+    "0.000000000000005633189227582935"
+    &(Located.str &(first-form "0.000000000000005633189227582935"))
+    "tiny Double renders in decimal, not scientific notation")
 
   ; --- end positions track the byte after the form ---
   (assert-equal t
