@@ -121,12 +121,17 @@ strings round-trip readably.")
   caller's formatting pass.")
   (private double-str)
   (hidden double-str)
-  (doc double-str "renders a `Double` with a decimal point preserved.
-`Double.str 10.0` returns `\"10\"`, which round-trips as an `Int`; we
-append `.0` so the source reads as a double again.")
+  (doc double-str "renders a `Double` keeping it lexically a double.
+`Double.str 10.0` returns `\"10\"`, which would round-trip as an `Int`;
+scientific notation (`1e+09`) round-trips fine on its own. Append `.0`
+only when the output has neither a decimal point nor an exponent.")
   (defn double-str [d]
     (let-do [s (Double.str d)]
-      (if (String.contains? &s \.) s (String.append &s ".0"))))
+      (if (or
+          (String.contains? &s \.)
+          (or (String.contains? &s \e) (String.contains? &s \E)))
+        s
+        (String.append &s ".0"))))
 
   (defn str [a]
     (match-ref a
