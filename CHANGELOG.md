@@ -3,6 +3,12 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project follows [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+- `Form.str` uses `StringBuf` for `join-children`, `join-segments`,
+  and `escape-string`, replacing O(n²) `String.append` loops with
+  amortised O(n) appends. Adds a dependency on `strbuf@0.1.0`.
+
 ## [0.3.0]
 
 - `Located` gains an `end Info` field tracking the position just past

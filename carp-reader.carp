@@ -1,4 +1,5 @@
 (load "git@github.com:carpentry-org/parsec@0.2.0")
+(load "git@github.com:carpentry-org/strbuf@0.1.0")
 
 (doc Info "is the parser-captured source position of a form: byte
 offset `pos`, `line`, and `col`.")
@@ -40,26 +41,25 @@ nested. Synthesized nodes (reader-macro expansions) carry
   (private join-children)
   (hidden join-children)
   (defn join-children [items]
-    (let-do [out @""]
+    (let-do [sb (StringBuf.create)]
       (for [i 0 (Array.length items)]
         (do
-          (when (Int.> i 0) (set! out (String.append &out " ")))
-          (set! out
-                (String.append &out
-                               &(Form.str
-                                 (Located.form (Box.peek (Array.unsafe-nth items
-                                                                           i))))))))
-      out))
+          (when (Int.> i 0) (StringBuf.append-str &sb " "))
+          (StringBuf.append-str &sb
+                                &(Form.str
+                                  (Located.form (Box.peek (Array.unsafe-nth items
+                                                                            i)))))))
+      (StringBuf.to-string &sb)))
 
   (private join-segments)
   (hidden join-segments)
   (defn join-segments [segs]
-    (let-do [out @""]
+    (let-do [sb (StringBuf.create)]
       (for [i 0 (Array.length segs)]
         (do
-          (when (Int.> i 0) (set! out (String.append &out ".")))
-          (set! out (String.append &out (Array.unsafe-nth segs i)))))
-      out))
+          (when (Int.> i 0) (StringBuf.append-str &sb "."))
+          (StringBuf.append-str &sb (Array.unsafe-nth segs i))))
+      (StringBuf.to-string &sb)))
 
   (private escape-string-byte)
   (hidden escape-string-byte)
@@ -85,7 +85,7 @@ protocol-style strings (HTTP, Redis) keep their line endings explicit
 on the source side. A standalone `\\n` is kept raw — multi-line doc
 strings round-trip readably.")
   (defn escape-string [s]
-    (let-do [out @""
+    (let-do [sb (StringBuf.create)
              n (String.length s)
              i 0]
       (while-do (Int.< i n)
@@ -94,11 +94,11 @@ strings round-trip readably.")
                             (and (Int.< (Int.inc i) n)
                                  (Char.= (String.char-at s (Int.inc i)) \newline)))]
           (if crlf?
-            (do (set! out (String.append &out "\\r\\n")) (set! i (Int.+ i 2)))
+            (do (StringBuf.append-str &sb "\\r\\n") (set! i (Int.+ i 2)))
             (do
-              (set! out (String.append &out &(escape-string-byte b)))
+              (StringBuf.append-str &sb &(escape-string-byte b))
               (set! i (Int.inc i))))))
-      out))
+      (StringBuf.to-string &sb)))
 
   (private show-char)
   (hidden show-char)
