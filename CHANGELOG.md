@@ -5,6 +5,10 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+- String parser now rejects invalid escape sequences (e.g. `\z`,
+  `\0`) with a parse error instead of silently emitting raw bytes.
+  `\u` and `\U` escapes also validate that the required hex digits
+  are actually hex characters.
 - `Form.str` uses `StringBuf` for `join-children`, `join-segments`,
   and `escape-string`, replacing O(n²) `String.append` loops with
   amortised O(n) appends. Adds a dependency on `strbuf@0.1.0`.

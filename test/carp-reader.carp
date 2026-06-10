@@ -193,6 +193,31 @@
 b\"" &(Located.str &(first-form "\"a
 b\"")) "string with literal newline stays as literal newline")
 
+  ; --- valid escape sequences in strings ---
+  (assert-equal t
+    "\"\\t\""
+    &(Located.str &(first-form "\"\\t\""))
+    "round-trip: tab escape")
+  (assert-equal t
+    "\"A\""
+    &(Located.str &(first-form "\"\\x41\""))
+    "hex escape \\x41 produces A")
+  (assert-equal t
+    "\"A\""
+    &(Located.str &(first-form "\"\\u0041\""))
+    "unicode escape \\u0041 produces A")
+
+  ; --- invalid escape sequences in strings ---
+  (assert-true t (parse-error? "\"\\z\"") "invalid escape \\z errors")
+  (assert-true t (parse-error? "\"\\q\"") "invalid escape \\q errors")
+  (assert-true t (parse-error? "\"\\0\"") "\\0 is not a valid escape")
+  (assert-true t (parse-error? "\"\\x\"") "\\x without hex digits errors")
+  (assert-true t (parse-error? "\"\\xZZ\"") "\\x with non-hex chars errors")
+  (assert-true t (parse-error? "\"\\uGHIJ\"") "\\u with non-hex chars errors")
+  (assert-true t
+    (parse-error? "\"\\U0000GHIJ\"")
+    "\\U with non-hex chars errors")
+
   ; --- error cases ---
   (assert-true t (parse-error? "(") "unbalanced open paren errors")
   (assert-true t (parse-error? "\"unterminated") "unterminated string errors"))
