@@ -528,17 +528,17 @@ there is no exponent here.")
             (let-do [c (Cursor.advance cur \")
                      bytes (the (Array Byte) [])
                      going true
-                     err false]
-              (while-do (and going (not err))
+                     err @""]
+              (while-do (and going (Int.= 0 (String.length &err)))
                 (if (Int.>= @(Cursor.pos &c) len)
-                  (set! err true)
+                  (set! err @"closing quote")
                   (let [ch (String.char-at src @(Cursor.pos &c))]
                     (cond
                       (Char.= ch \")
                         (do (set! c (Cursor.advance &c ch)) (set! going false))
                       (Char.= ch \\)
                         (if (Int.>= (Int.+ @(Cursor.pos &c) 1) len)
-                          (set! err true)
+                          (set! err @"closing quote")
                           (let [esc (String.char-at src
                                                     (Int.+ @(Cursor.pos &c) 1))]
                             (cond
@@ -600,40 +600,49 @@ there is no exponent here.")
                                                                (Int.- end
                                                                       @(Cursor.pos &c))
                                                                false)))
-                                    (set! err true)))
+                                    (set! err @"hex digits after \\x")))
                               (Char.= esc \u)
                                 (if (Int.>= (Int.+ @(Cursor.pos &c) 6)
                                             (Int.inc len))
-                                  (set! err true)
-                                  (do
-                                    (set! bytes
-                                          (push-utf8-bytes bytes
-                                                           (read-hex src
-                                                                     (Int.+ @(Cursor.pos &c)
-                                                                            2)
-                                                                     4)))
-                                    (set! c (Cursor.advance-by &c 6 false))))
+                                  (set! err @"4 hex digits in \\u escape")
+                                  (let-do [hex-start (Int.+ @(Cursor.pos &c) 2)
+                                           all-hex true]
+                                    (for [j hex-start (Int.+ hex-start 4)]
+                                      (unless (hex-digit? (String.char-at src j))
+                                        (set! all-hex false)))
+                                    (if all-hex
+                                      (do
+                                        (set! bytes
+                                              (push-utf8-bytes bytes
+                                                               (read-hex src
+                                                                         hex-start
+                                                                         4)))
+                                        (set! c (Cursor.advance-by &c 6 false)))
+                                      (set! err @"hex digits in \\u escape"))))
                               (Char.= esc \U)
                                 (if (Int.>= (Int.+ @(Cursor.pos &c) 10)
                                             (Int.inc len))
-                                  (set! err true)
-                                  (do
-                                    (set! bytes
-                                          (push-utf8-bytes bytes
-                                                           (read-hex src
-                                                                     (Int.+ @(Cursor.pos &c)
-                                                                            2)
-                                                                     8)))
-                                    (set! c (Cursor.advance-by &c 10 false))))
-                              (do
-                                (set! bytes (push-byte bytes \\))
-                                (set! bytes (push-byte bytes esc))
-                                (set! c (Cursor.advance-by &c 2 false))))))
+                                  (set! err @"8 hex digits in \\U escape")
+                                  (let-do [hex-start (Int.+ @(Cursor.pos &c) 2)
+                                           all-hex true]
+                                    (for [j hex-start (Int.+ hex-start 8)]
+                                      (unless (hex-digit? (String.char-at src j))
+                                        (set! all-hex false)))
+                                    (if all-hex
+                                      (do
+                                        (set! bytes
+                                              (push-utf8-bytes bytes
+                                                               (read-hex src
+                                                                         hex-start
+                                                                         8)))
+                                        (set! c (Cursor.advance-by &c 10 false)))
+                                      (set! err @"hex digits in \\U escape"))))
+                              (set! err @"valid escape sequence"))))
                       (do
                         (set! bytes (push-byte bytes ch))
                         (set! c (Cursor.advance &c ch)))))))
-              (if err
-                (Reply.ErrConsumed (ParseErr.expected-at &c @"closing quote"))
+              (if (Int.> (String.length &err) 0)
+                (Reply.ErrConsumed (ParseErr.expected-at &c err))
                 (Reply.OkConsumed (Form.Str (String.from-bytes &bytes)) c))))))))
 
   (private raw-string)
