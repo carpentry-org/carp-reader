@@ -4,7 +4,7 @@
 
 (use-all Test Form)
 
-(defn unsafe-parse [s] (Result.unsafe-from-success (Reader.parse s)))
+(defn unsafe-parse [s] (Result.from-success (Reader.parse s) []))
 
 (defn parse-error? [s] (Result.error? &(Reader.parse s)))
 
@@ -25,7 +25,6 @@
   (let [loc (first-form s)] (match-ref (Located.form &loc) (Flt _) true _ false)))
 
 (deftest t
-  ; --- atoms ---
   (assert-equal t 1 (Array.length &(unsafe-parse "42")) "parse: single integer")
   (assert-equal t "42" &(Located.str &(first-form "42")) "round-trip: integer")
   (assert-equal t "-7l" &(Located.str &(first-form "-7l")) "round-trip: long")
@@ -61,7 +60,6 @@
     &(Located.str &(first-form "+"))
     "round-trip: operator symbol")
 
-  ; --- compound ---
   (assert-equal t
     "(defn foo [x] x)"
     &(Located.str &(first-form "(defn foo [x] x)"))
@@ -73,7 +71,6 @@
     "static array")
   (assert-equal t "{:a 1}" &(Located.str &(first-form "{:a 1}")) "dict")
 
-  ; --- reader macros lower to (name form) ---
   (assert-equal t "(ref x)" &(Located.str &(first-form "&x")) "ref reader macro")
   (assert-equal t
     "(deref x)"
@@ -100,7 +97,6 @@
     &(Located.str &(first-form "%@x"))
     "unquote-splicing reader macro")
 
-  ; --- comments are first-class ---
   (assert-equal t 2 (Array.length &(unsafe-parse "; hi
 42")) "comment + form = two top-level nodes")
   (assert-equal t ";a
@@ -111,12 +107,10 @@
   (assert-equal t 3 (let [f (first-form "(a ; comment
  b)")] (match-ref (Located.form &f) (Lst items) (Array.length items) _ -1)) "comment inside list survives")
 
-  ; --- whole-file: parse a small chunk of plausible Carp ---
   (assert-equal t 3 (Array.length &(unsafe-parse "; header comment
 (defn foo [x] x)
 (def y 1)")) "comment + two defns at top level")
 
-  ; --- Info / Located positions ---
   (assert-equal t
     1
     @(Info.line (Located.info &(first-form "42")))
@@ -135,7 +129,6 @@
     2
     (first-child-col "(a b)")
     "child position is relative to source, not parent")
-  ; --- scientific notation in doubles / floats ---
   (assert-true t (is-double? "1e6") "1e6 parses as Double")
   (assert-true t (is-double? "1e+06") "1e+06 parses as Double")
   (assert-true t (is-double? "1.5e-3") "1.5e-3 parses as Double")
@@ -145,13 +138,11 @@
     (Array.length &(unsafe-parse "1e6 x"))
     "1e6 followed by symbol parses as two top-level forms")
 
-  ; --- UTF-8 bytes round-trip through Form.Str ---
   (assert-equal t
     "\"µs\""
     &(Located.str &(first-form "\"µs\""))
     "string with µ (2-byte UTF-8) round-trips")
 
-  ; --- whole-number doubles preserve the decimal point ---
   (assert-equal t
     "10.0"
     &(Located.str &(first-form "10.0"))
@@ -176,7 +167,6 @@
     &(Located.str &(first-form "0.000000000000005633189227582935"))
     "tiny Double renders in decimal, not scientific notation")
 
-  ; --- end positions track the byte after the form ---
   (assert-equal t
     2
     @(Info.pos (Located.end &(first-form "42")))
@@ -188,12 +178,10 @@
   (assert-equal t 2 @(Info.line (Located.end &(first-form "(a
  b)"))) "multi-line form's end line tracks where it closed")
 
-  ; --- multi-line strings round-trip without `\n` escapes ---
   (assert-equal t "\"a
 b\"" &(Located.str &(first-form "\"a
 b\"")) "string with literal newline stays as literal newline")
 
-  ; --- valid escape sequences in strings ---
   (assert-equal t
     "\"\\t\""
     &(Located.str &(first-form "\"\\t\""))
@@ -207,7 +195,6 @@ b\"")) "string with literal newline stays as literal newline")
     &(Located.str &(first-form "\"\\u0041\""))
     "unicode escape \\u0041 produces A")
 
-  ; --- invalid escape sequences in strings ---
   (assert-true t (parse-error? "\"\\z\"") "invalid escape \\z errors")
   (assert-true t (parse-error? "\"\\q\"") "invalid escape \\q errors")
   (assert-true t (parse-error? "\"\\0\"") "\\0 is not a valid escape")
@@ -218,6 +205,5 @@ b\"")) "string with literal newline stays as literal newline")
     (parse-error? "\"\\U0000GHIJ\"")
     "\\U with non-hex chars errors")
 
-  ; --- error cases ---
   (assert-true t (parse-error? "(") "unbalanced open paren errors")
   (assert-true t (parse-error? "\"unterminated") "unterminated string errors"))

@@ -63,12 +63,6 @@ nested. Synthesized nodes (reader-macro expansions) carry
 
   (private escape-string-byte)
   (hidden escape-string-byte)
-  (doc escape-string-byte "renders a byte for inclusion in a string
-literal. `\\` and `\"` must be escaped to keep the literal valid;
-`\\r` and `\\t` are kept as escapes because users rarely write
-literal carriage returns / tabs in source. `\\n` (literal newline)
-is emitted as a raw newline byte so multi-line string literals
-round-trip readably.")
   (defn escape-string-byte [b]
     (cond
       (Char.= b \\) @"\\\\"
@@ -79,11 +73,8 @@ round-trip readably.")
 
   (private escape-string)
   (hidden escape-string)
-  (doc escape-string "byte-walks `s`, applying `escape-string-byte`. CRLF
-(`\\r` followed by raw `\\n`) is emitted as the escape pair `\\r\\n` so
-protocol-style strings (HTTP, Redis) keep their line endings explicit
-on the source side. A standalone `\\n` is kept raw — multi-line doc
-strings round-trip readably.")
+  ; CRLF is emitted as the escape pair \r\n so protocol strings keep line
+  ; endings explicit; a standalone \n is kept raw for readable multi-line strings.
   (defn escape-string [s]
     (let-do [sb (StringBuf.create)
              n (String.length s)
@@ -114,9 +105,6 @@ strings round-trip readably.")
       (Int.> (Char.to-int c) 127) (fmt "\\u%04x" (Char.to-int c))
       (fmt "\\%c" c)))
 
-  (doc str "renders an `Form` back to source-like text. Round-trips
-  for syntactic content; whitespace around comments is left to the
-  caller's formatting pass.")
   (private double-round-trips?)
   (hidden double-round-trips?)
   (defn double-round-trips? [s d]
@@ -131,10 +119,7 @@ strings round-trip readably.")
 
   (private strip-trailing-zeros)
   (hidden strip-trailing-zeros)
-  (doc strip-trailing-zeros "for a decimal string containing `.`, drops
-trailing `0` digits but keeps at least one digit after the decimal point
-so the result remains lexically a `Double` (e.g. `\"10.000\"` becomes
-`\"10.0\"`, not `\"10.\"`).")
+  ; keeps at least one digit after the point so the result stays a Double.
   (defn strip-trailing-zeros [s]
     (if (not (String.contains? s \.))
       @s
@@ -150,22 +135,14 @@ so the result remains lexically a `Double` (e.g. `\"10.000\"` becomes
 
   (private double-str)
   (hidden double-str)
-  (doc double-str "renders a `Double` as a decimal literal that
-round-trips and parses with Carp's lexer (which does NOT accept
-scientific notation: only `digits.digits`).
-
-Tries `Double.str` (`%g`, 6 sig figs) first, which is short and works
-for values the user wrote concisely. Falls back to `%.17g` (full
-round-trip precision). If either uses an exponent, walks `%.Pf` with
-P growing from 17 up to 330 (which covers the entire IEEE 754
-dynamic range down to denormals near 5e-324) and picks the smallest
-P whose stripped output still round-trips. Appends `.0` when the
-result has no decimal point so it parses as `Double`, not `Int`.")
+  ; Carp's lexer rejects scientific notation, so any exponent output is
+  ; widened to `%.Pf` (P up to 330, covering denormals) and `.0` is appended
+  ; when there is no decimal point so the result still parses as a Double.
   (defn double-str [d]
     (let-do [s (Double.str d)]
       (when (or (not (decimal-only? &s)) (not (double-round-trips? &s d)))
         (set! s (Double.format "%.17g" d)))
-      (when-do (not (decimal-only? &s))
+      (unless-do (decimal-only? &s)
         (let-do [precs [17 21 25 30 40 50 70 100 150 220 330]
                  n (Array.length &precs)
                  i 0]
@@ -179,6 +156,9 @@ result has no decimal point so it parses as `Double`, not `Int`.")
             (set! i (Int.inc i)))))
       (if (String.contains? &s \.) s (String.append &s ".0"))))
 
+  (doc str "renders a `Form` back to source-like text. Round-trips
+  for syntactic content; whitespace around comments is left to the
+  caller's formatting pass.")
   (defn str [a]
     (match-ref a
       (Itg n) (Int.str @n)
@@ -286,9 +266,6 @@ you need it.")
 
   (private push-utf8-bytes)
   (hidden push-utf8-bytes)
-  (doc push-utf8-bytes "encodes a Unicode codepoint as UTF-8 bytes and
-appends them to `bytes`. Used by `\\u` / `\\U` string escapes which
-specify codepoints rather than raw bytes.")
   (defn push-utf8-bytes [bytes cp]
     (cond
       (Int.< cp 128) (Array.push-back bytes (Byte.from-int cp))
@@ -363,11 +340,7 @@ specify codepoints rather than raw bytes.")
 
   (private scan-exponent)
   (hidden scan-exponent)
-  (doc scan-exponent "scans a decimal exponent starting at `pos`. If
-the byte at `pos` is `e` or `E` and is followed by an optional sign
-and at least one digit, returns the position just past the last
-exponent digit. Otherwise returns `pos` unchanged, signalling that
-there is no exponent here.")
+  ; returns `pos` unchanged to signal that there is no exponent here.
   (defn scan-exponent [src len pos]
     (if (Int.>= pos len)
       pos
@@ -664,17 +637,15 @@ there is no exponent here.")
                 (if (Int.>= @(Cursor.pos &c) len)
                   (set! err true)
                   (let [ch (String.char-at src @(Cursor.pos &c))]
-                    (cond
-                      (Char.= ch \")
-                        (if (and (Int.< (Int.inc @(Cursor.pos &c)) len)
-                                 (Char.=
-                                   (String.char-at src
-                                                   (Int.inc @(Cursor.pos &c)))
-                                   \"))
-                          (do
-                            (set! chars (Array.push-back chars \"))
-                            (set! c (Cursor.advance-by &c 2 false)))
-                          (do (set! c (Cursor.advance &c ch)) (set! going false)))
+                    (if (Char.= ch \")
+                      (if (and (Int.< (Int.inc @(Cursor.pos &c)) len)
+                               (Char.=
+                                 (String.char-at src (Int.inc @(Cursor.pos &c)))
+                                 \"))
+                        (do
+                          (set! chars (Array.push-back chars \"))
+                          (set! c (Cursor.advance-by &c 2 false)))
+                        (do (set! c (Cursor.advance &c ch)) (set! going false)))
                       (do
                         (set! chars (Array.push-back chars ch))
                         (set! c (Cursor.advance &c ch)))))))
@@ -701,9 +672,8 @@ there is no exponent here.")
                 (if (Int.>= @(Cursor.pos &c) len)
                   (set! err true)
                   (let [ch (String.char-at src @(Cursor.pos &c))]
-                    (cond
-                      (Char.= ch \")
-                        (do (set! c (Cursor.advance &c ch)) (set! going false))
+                    (if (Char.= ch \")
+                      (do (set! c (Cursor.advance &c ch)) (set! going false))
                       (do
                         (set! chars (Array.push-back chars ch))
                         (set! c (Cursor.advance &c ch)))))))
