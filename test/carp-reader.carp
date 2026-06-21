@@ -103,7 +103,6 @@
 " &(Located.str &(first-form ";a")) "comment node round-trip")
   (assert-equal t 3 (Array.length &(unsafe-parse "1 ; mid
  2")) "comment between two top-level forms")
-  ; Inline comments inside compound forms.
   (assert-equal t 3 (let [f (first-form "(a ; comment
  b)")] (match-ref (Located.form &f) (Lst items) (Array.length items) _ -1)) "comment inside list survives")
 
