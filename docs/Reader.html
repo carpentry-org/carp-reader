@@ -161,7 +161,7 @@
                         def
                     </div>
                     <p class="sig">
-                        (Parser Form)
+                        (Parser Located)
                     </p>
                     <span>
                         
@@ -427,7 +427,7 @@
                         defn
                     </div>
                     <p class="sig">
-                        (Fn [(Ref String a)] (Result (Array (Box Form)) ParseErr))
+                        (Fn [(Ref String a)] (Result (Array (Box Located)) ParseErr))
                     </p>
                     <pre class="args">
                         (parse src)
@@ -449,7 +449,7 @@ with real forms.</p>
                         defn
                     </div>
                     <p class="sig">
-                        (Fn [(Ref String a)] (Result Form ParseErr))
+                        (Fn [(Ref String a)] (Result Located ParseErr))
                     </p>
                     <pre class="args">
                         (parse-form src)

@@ -5,6 +5,8 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.3.6]
+
 - String parser now rejects invalid escape sequences (e.g. `\z`,
   `\0`) with a parse error instead of silently emitting raw bytes.
   `\u` and `\U` escapes also validate that the required hex digits

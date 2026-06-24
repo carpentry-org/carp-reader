@@ -36,7 +36,8 @@
                 </h1>
                 <div class="module-description">
                     <p>is a representation of a Carp source-form AST. Every form
-in Carp source maps to one <code>Form</code> variant</p>
+in Carp source maps to one <code>Form</code> variant. Recursive children are
+<code>Located</code> so position info is preserved at every node.</p>
 
                 </div>
                 <div class="binder">
@@ -49,7 +50,7 @@ in Carp source maps to one <code>Form</code> variant</p>
                         instantiate
                     </div>
                     <p class="sig">
-                        (Fn [(Array (Box Form))] Form)
+                        (Fn [(Array (Box Located))] Form)
                     </p>
                     <span>
                         
@@ -169,7 +170,7 @@ in Carp source maps to one <code>Form</code> variant</p>
                         instantiate
                     </div>
                     <p class="sig">
-                        (Fn [(Array (Box Form))] Form)
+                        (Fn [(Array (Box Located))] Form)
                     </p>
                     <span>
                         
@@ -249,7 +250,7 @@ in Carp source maps to one <code>Form</code> variant</p>
                         instantiate
                     </div>
                     <p class="sig">
-                        (Fn [(Array (Box Form))] Form)
+                        (Fn [(Array (Box Located))] Form)
                     </p>
                     <span>
                         
@@ -289,7 +290,7 @@ in Carp source maps to one <code>Form</code> variant</p>
                         instantiate
                     </div>
                     <p class="sig">
-                        (Fn [(Array (Box Form))] Form)
+                        (Fn [(Array (Box Located))] Form)
                     </p>
                     <span>
                         
@@ -435,7 +436,7 @@ in Carp source maps to one <code>Form</code> variant</p>
                         (str a)
                     </pre>
                     <p class="doc">
-                        <p>renders an <code>Form</code> back to source-like text. Round-trips
+                        <p>renders a <code>Form</code> back to source-like text. Round-trips
 for syntactic content; whitespace around comments is left to the
 caller's formatting pass.</p>
 
