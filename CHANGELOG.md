@@ -5,6 +5,15 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+- Characters above U+FFFF now round-trip through `Form.str`. They are
+  rendered as `\U` followed by eight hex digits instead of `\u` with
+  five or six digits, which could not be re-parsed. Character literals
+  also accept `\U` escapes when reading.
+- The `\x` escape inside string literals now consumes at most two hex
+  digits (one byte), matching C. Previously trailing hex digits were
+  silently folded into the low byte (e.g. `\x413` produced a single
+  byte instead of `A` followed by `3`).
+
 ## [0.3.6]
 
 - String parser now rejects invalid escape sequences (e.g. `\z`,

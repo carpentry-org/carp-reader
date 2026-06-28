@@ -102,6 +102,8 @@ nested. Synthesized nodes (reader-macro expansions) carry
       (Char.= c \backspace) @"\\backspace"
       (Char.= c \formfeed) @"\\formfeed"
       (Char.= c \") @"\\\""
+      ; codepoints above the BMP need \U + 8 digits; \u only re-parses 4.
+      (Int.> (Char.to-int c) 65535) (fmt "\\U%08x" (Char.to-int c))
       (Int.> (Char.to-int c) 127) (fmt "\\u%04x" (Char.to-int c))
       (fmt "\\%c" c)))
 
@@ -552,9 +554,14 @@ you need it.")
                                   (set! bytes (push-byte bytes esc))
                                   (set! c (Cursor.advance-by &c 2 false)))
                               (Char.= esc \x)
+                                ; C semantics: \x maps to one byte, so read at
+                                ; most 2 hex digits (capping avoids silently
+                                ; folding extra digits down to the low byte).
                                 (let-do [digits-start (Int.+ @(Cursor.pos &c) 2)
+                                         max-end (Int.min len
+                                                          (Int.+ digits-start 2))
                                          end digits-start]
-                                  (while-do (and (Int.< end len)
+                                  (while-do (and (Int.< end max-end)
                                                  (hex-digit? (String.char-at src
                                                                              end)))
                                     (set! end (Int.inc end)))
@@ -563,11 +570,10 @@ you need it.")
                                       (set! bytes
                                             (Array.push-back bytes
                                                              (Byte.from-int
-                                                               (Int.bit-and 255
-                                                                            (read-hex src
-                                                                                      digits-start
-                                                                                      (Int.- end
-                                                                                             digits-start))))))
+                                                               (read-hex src
+                                                                         digits-start
+                                                                         (Int.- end
+                                                                                digits-start)))))
                                       (set! c
                                             (Cursor.advance-by &c
                                                                (Int.- end
@@ -708,13 +714,28 @@ you need it.")
                        (Parser.pure
                          (Form.Chr (Char.from-int (read-hex &hex 0 4)))))))))
 
+  (private unicode-char-long)
+  (hidden unicode-char-long)
+  (defn unicode-char-long []
+    (Parser.bind (Parser.byte \U)
+                 (fn [_]
+                   (Parser.bind
+                     (Parser.slice-of
+                       (Parser.count 8
+                                     (Parser.satisfy (fn [c] (hex-digit? c))
+                                                     @"hex digit")))
+                     (fn [hex]
+                       (Parser.pure
+                         (Form.Chr (Char.from-int (read-hex &hex 0 8)))))))))
+
   (private char-)
   (hidden char-)
   (defn char- []
     (Parser.bind (Parser.byte \\)
                  (fn [_]
                    (Parser.choice
-                     [(Parser.try (unicode-char))
+                     [(Parser.try (unicode-char-long))
+                      (Parser.try (unicode-char))
                       (Parser.bind
                         (Parser.take-while1 (fn [c] (sym-byte? c)))
                         (fn [name]

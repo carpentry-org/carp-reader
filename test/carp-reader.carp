@@ -52,6 +52,22 @@
     &(Located.str &(first-form "\\space"))
     "round-trip: named char")
   (assert-equal t
+    1
+    (Array.length &(unsafe-parse "\\U0001f600"))
+    "char above BMP parses as a single form")
+  (assert-equal t
+    "\\U0001f600"
+    &(Located.str &(first-form "\\U0001f600"))
+    "round-trip: char above BMP via \\U")
+  (assert-equal t
+    "\\U00010000"
+    &(Located.str &(first-form "\\U00010000"))
+    "round-trip: first astral codepoint via \\U")
+  (assert-equal t
+    "\\uffff"
+    &(Located.str &(first-form "\\uffff"))
+    "round-trip: U+FFFF stays \\u at the BMP boundary")
+  (assert-equal t
     "Foo.Bar.baz"
     &(Located.str &(first-form "Foo.Bar.baz"))
     "round-trip: dotted symbol")
@@ -193,6 +209,18 @@ b\"")) "string with literal newline stays as literal newline")
     "\"A\""
     &(Located.str &(first-form "\"\\u0041\""))
     "unicode escape \\u0041 produces A")
+  (assert-equal t
+    "\"J\""
+    &(Located.str &(first-form "\"\\x4a\""))
+    "hex escape \\x4a produces J")
+  (assert-equal t
+    "\"A3\""
+    &(Located.str &(first-form "\"\\x413\""))
+    "hex escape caps at 2 digits: \\x413 is A then literal 3")
+  (assert-equal t
+    "\"😀\""
+    &(Located.str &(first-form "\"\\U0001F600\""))
+    "string \\U escape decodes to its UTF-8 bytes")
 
   (assert-true t (parse-error? "\"\\z\"") "invalid escape \\z errors")
   (assert-true t (parse-error? "\"\\q\"") "invalid escape \\q errors")
