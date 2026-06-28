@@ -95,14 +95,25 @@ nested. Synthesized nodes (reader-macro expansions) carry
   (hidden show-char)
   (defn show-char [c]
     (cond
-      (Char.= c \space) @"\\space"
-      (Char.= c \tab) @"\\tab"
-      (Char.= c \newline) @"\\newline"
-      (Char.= c \return) @"\\return"
-      (Char.= c \backspace) @"\\backspace"
-      (Char.= c \formfeed) @"\\formfeed"
-      (Char.= c \") @"\\\""
-      (Int.> (Char.to-int c) 127) (fmt "\\u%04x" (Char.to-int c))
+      (Char.= c \space)
+      @"\\space"
+      (Char.= c \tab)
+      @"\\tab"
+      (Char.= c \newline)
+      @"\\newline"
+      (Char.= c \return)
+      @"\\return"
+      (Char.= c \backspace)
+      @"\\backspace"
+      (Char.= c \formfeed)
+      @"\\formfeed"
+      (Char.= c \")
+      @"\\\""
+      ; codepoints above the BMP need \U + 8 digits; \u only re-parses 4.
+      (Int.> (Char.to-int c) 65535)
+      (fmt "\\U%08x" (Char.to-int c))
+      (Int.> (Char.to-int c) 127)
+      (fmt "\\u%04x" (Char.to-int c))
       (fmt "\\%c" c)))
 
   (private double-round-trips?)
@@ -516,100 +527,103 @@ you need it.")
                                                     (Int.+ @(Cursor.pos &c) 1))]
                             (cond
                               (Char.= esc \n)
-                                (do
-                                  (set! bytes (push-byte bytes \newline))
-                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (do
+                                (set! bytes (push-byte bytes \newline))
+                                (set! c (Cursor.advance-by &c 2 false)))
                               (Char.= esc \t)
-                                (do
-                                  (set! bytes (push-byte bytes \tab))
-                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (do
+                                (set! bytes (push-byte bytes \tab))
+                                (set! c (Cursor.advance-by &c 2 false)))
                               (Char.= esc \r)
-                                (do
-                                  (set! bytes (push-byte bytes \return))
-                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (do
+                                (set! bytes (push-byte bytes \return))
+                                (set! c (Cursor.advance-by &c 2 false)))
                               (Char.= esc \b)
-                                (do
-                                  (set! bytes (push-byte bytes \backspace))
-                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (do
+                                (set! bytes (push-byte bytes \backspace))
+                                (set! c (Cursor.advance-by &c 2 false)))
                               (Char.= esc \f)
-                                (do
-                                  (set! bytes (push-byte bytes \formfeed))
-                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (do
+                                (set! bytes (push-byte bytes \formfeed))
+                                (set! c (Cursor.advance-by &c 2 false)))
                               (Char.= esc \v)
-                                (do
-                                  (set! bytes
-                                        (Array.push-back bytes
-                                                         (Byte.from-int 11)))
-                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (do
+                                (set! bytes
+                                      (Array.push-back bytes (Byte.from-int 11)))
+                                (set! c (Cursor.advance-by &c 2 false)))
                               (Char.= esc \a)
-                                (do
-                                  (set! bytes
-                                        (Array.push-back bytes (Byte.from-int 7)))
-                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (do
+                                (set! bytes
+                                      (Array.push-back bytes (Byte.from-int 7)))
+                                (set! c (Cursor.advance-by &c 2 false)))
                               (or (Char.= esc \\)
                                   (or (Char.= esc \") (Char.= esc \')))
-                                (do
-                                  (set! bytes (push-byte bytes esc))
-                                  (set! c (Cursor.advance-by &c 2 false)))
+                              (do
+                                (set! bytes (push-byte bytes esc))
+                                (set! c (Cursor.advance-by &c 2 false)))
                               (Char.= esc \x)
-                                (let-do [digits-start (Int.+ @(Cursor.pos &c) 2)
-                                         end digits-start]
-                                  (while-do (and (Int.< end len)
-                                                 (hex-digit? (String.char-at src
-                                                                             end)))
-                                    (set! end (Int.inc end)))
-                                  (if (Int.> end digits-start)
+                              ; C semantics: \x maps to one byte, so read at
+                              ; most 2 hex digits (capping avoids silently
+                              ; folding extra digits down to the low byte).
+                              (let-do [digits-start (Int.+ @(Cursor.pos &c) 2)
+                                       max-end (Int.min len
+                                                        (Int.+ digits-start 2))
+                                       end digits-start]
+                                (while-do (and (Int.< end max-end)
+                                               (hex-digit? (String.char-at src
+                                                                           end)))
+                                  (set! end (Int.inc end)))
+                                (if (Int.> end digits-start)
+                                  (do
+                                    (set! bytes
+                                          (Array.push-back bytes
+                                                           (Byte.from-int
+                                                             (read-hex src
+                                                                       digits-start
+                                                                       (Int.- end
+                                                                              digits-start)))))
+                                    (set! c
+                                          (Cursor.advance-by &c
+                                                             (Int.- end
+                                                                    @(Cursor.pos &c))
+                                                             false)))
+                                  (set! err @"hex digits after \\x")))
+                              (Char.= esc \u)
+                              (if (Int.>= (Int.+ @(Cursor.pos &c) 6)
+                                          (Int.inc len))
+                                (set! err @"4 hex digits in \\u escape")
+                                (let-do [hex-start (Int.+ @(Cursor.pos &c) 2)
+                                         all-hex true]
+                                  (for [j hex-start (Int.+ hex-start 4)]
+                                    (unless (hex-digit? (String.char-at src j))
+                                      (set! all-hex false)))
+                                  (if all-hex
                                     (do
                                       (set! bytes
-                                            (Array.push-back bytes
-                                                             (Byte.from-int
-                                                               (Int.bit-and 255
-                                                                            (read-hex src
-                                                                                      digits-start
-                                                                                      (Int.- end
-                                                                                             digits-start))))))
-                                      (set! c
-                                            (Cursor.advance-by &c
-                                                               (Int.- end
-                                                                      @(Cursor.pos &c))
-                                                               false)))
-                                    (set! err @"hex digits after \\x")))
-                              (Char.= esc \u)
-                                (if (Int.>= (Int.+ @(Cursor.pos &c) 6)
-                                            (Int.inc len))
-                                  (set! err @"4 hex digits in \\u escape")
-                                  (let-do [hex-start (Int.+ @(Cursor.pos &c) 2)
-                                           all-hex true]
-                                    (for [j hex-start (Int.+ hex-start 4)]
-                                      (unless (hex-digit? (String.char-at src j))
-                                        (set! all-hex false)))
-                                    (if all-hex
-                                      (do
-                                        (set! bytes
-                                              (push-utf8-bytes bytes
-                                                               (read-hex src
-                                                                         hex-start
-                                                                         4)))
-                                        (set! c (Cursor.advance-by &c 6 false)))
-                                      (set! err @"hex digits in \\u escape"))))
+                                            (push-utf8-bytes bytes
+                                                             (read-hex src
+                                                                       hex-start
+                                                                       4)))
+                                      (set! c (Cursor.advance-by &c 6 false)))
+                                    (set! err @"hex digits in \\u escape"))))
                               (Char.= esc \U)
-                                (if (Int.>= (Int.+ @(Cursor.pos &c) 10)
-                                            (Int.inc len))
-                                  (set! err @"8 hex digits in \\U escape")
-                                  (let-do [hex-start (Int.+ @(Cursor.pos &c) 2)
-                                           all-hex true]
-                                    (for [j hex-start (Int.+ hex-start 8)]
-                                      (unless (hex-digit? (String.char-at src j))
-                                        (set! all-hex false)))
-                                    (if all-hex
-                                      (do
-                                        (set! bytes
-                                              (push-utf8-bytes bytes
-                                                               (read-hex src
-                                                                         hex-start
-                                                                         8)))
-                                        (set! c (Cursor.advance-by &c 10 false)))
-                                      (set! err @"hex digits in \\U escape"))))
+                              (if (Int.>= (Int.+ @(Cursor.pos &c) 10)
+                                          (Int.inc len))
+                                (set! err @"8 hex digits in \\U escape")
+                                (let-do [hex-start (Int.+ @(Cursor.pos &c) 2)
+                                         all-hex true]
+                                  (for [j hex-start (Int.+ hex-start 8)]
+                                    (unless (hex-digit? (String.char-at src j))
+                                      (set! all-hex false)))
+                                  (if all-hex
+                                    (do
+                                      (set! bytes
+                                            (push-utf8-bytes bytes
+                                                             (read-hex src
+                                                                       hex-start
+                                                                       8)))
+                                      (set! c (Cursor.advance-by &c 10 false)))
+                                    (set! err @"hex digits in \\U escape"))))
                               (set! err @"valid escape sequence"))))
                       (do
                         (set! bytes (push-byte bytes ch))
@@ -708,13 +722,28 @@ you need it.")
                        (Parser.pure
                          (Form.Chr (Char.from-int (read-hex &hex 0 4)))))))))
 
+  (private unicode-char-long)
+  (hidden unicode-char-long)
+  (defn unicode-char-long []
+    (Parser.bind (Parser.byte \U)
+                 (fn [_]
+                   (Parser.bind
+                     (Parser.slice-of
+                       (Parser.count 8
+                                     (Parser.satisfy (fn [c] (hex-digit? c))
+                                                     @"hex digit")))
+                     (fn [hex]
+                       (Parser.pure
+                         (Form.Chr (Char.from-int (read-hex &hex 0 8)))))))))
+
   (private char-)
   (hidden char-)
   (defn char- []
     (Parser.bind (Parser.byte \\)
                  (fn [_]
                    (Parser.choice
-                     [(Parser.try (unicode-char))
+                     [(Parser.try (unicode-char-long))
+                      (Parser.try (unicode-char))
                       (Parser.bind
                         (Parser.take-while1 (fn [c] (sym-byte? c)))
                         (fn [name]
