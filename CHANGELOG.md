@@ -3,7 +3,7 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project follows [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## [0.3.7]
 
 - Characters above U+FFFF now round-trip through `Form.str`. They are
   rendered as `\U` followed by eight hex digits instead of `\u` with
