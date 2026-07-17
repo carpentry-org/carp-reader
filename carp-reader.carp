@@ -624,7 +624,33 @@ you need it.")
                                                                        8)))
                                       (set! c (Cursor.advance-by &c 10 false)))
                                     (set! err @"hex digits in \\U escape"))))
-                              (set! err @"valid escape sequence"))))
+                              ;; a digit run after the backslash reads as one
+                              ;; character code (the reference feeds octal-looking
+                              ;; runs through its hex reader, quirk included).
+                              (and (Char.>= esc \0) (Char.<= esc \7))
+                              (let-do [digits-start (Int.inc @(Cursor.pos &c))
+                                       end digits-start]
+                                (while-do (and (Int.< end len)
+                                               (let [d (String.char-at src end)]
+                                                 (and (Char.>= d \0) (Char.<= d \7))))
+                                  (set! end (Int.inc end)))
+                                (set! bytes
+                                      (push-utf8-bytes bytes
+                                                       (read-hex src
+                                                                 digits-start
+                                                                 (Int.- end
+                                                                        digits-start))))
+                                (set! c
+                                      (Cursor.advance-by &c
+                                                         (Int.- end
+                                                                @(Cursor.pos &c))
+                                                         false)))
+                              ;; the reference passes any other escape through
+                              ;; verbatim, backslash included.
+                              (do
+                                (set! bytes (push-byte bytes \\))
+                                (set! bytes (push-byte bytes esc))
+                                (set! c (Cursor.advance-by &c 2 false))))))
                       (do
                         (set! bytes (push-byte bytes ch))
                         (set! c (Cursor.advance &c ch)))))))
@@ -747,11 +773,14 @@ you need it.")
                       (Parser.bind
                         (Parser.take-while1 (fn [c] (sym-byte? c)))
                         (fn [name]
-                          (if (= 1 (String.length &name))
-                            (Parser.pure (Form.Chr (String.char-at &name 0)))
-                            (match (named-char @&name)
-                              (Maybe.Just c) (Parser.pure (Form.Chr c))
-                              (Maybe.Nothing) (Parser.fail @"named char")))))
+                          ;; one CODEPOINT (not byte) is a plain char literal,
+                          ;; so multibyte literals like \ä parse
+                          (let [decoded (String.chars &name)]
+                            (if (= 1 (Array.length &decoded))
+                              (Parser.pure (Form.Chr @(Array.unsafe-nth &decoded 0)))
+                              (match (named-char @&name)
+                                (Maybe.Just c) (Parser.pure (Form.Chr c))
+                                (Maybe.Nothing) (Parser.fail @"named char"))))))
                       (Parser.map (Parser.any-byte) (fn [c] (Form.Chr c)))]))))
 
   (private segment)
