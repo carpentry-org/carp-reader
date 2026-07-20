@@ -34,9 +34,11 @@
 <pre><code>(load &quot;git@github.com:carpentry-org/carp-reader@0.3.7&quot;)
 
 (match (Reader.parse &quot;(defn hello [] (println \&quot;hi\&quot;))&quot;)
-  (Result.Success forms) (for [i 0 (Array.length &amp;forms)]
-                           (println &amp;(Form.str (Box.peek (Array.unsafe-nth &amp;forms i)))))
-  (Result.Error e)       (IO.errorln &amp;(Parser.format-error &amp;e)))
+  (Result.Success forms)
+    (for [i 0 (Array.length &amp;forms)]
+      (IO.println &amp;(Form.str (Located.form (Box.peek (Array.unsafe-nth &amp;forms i))))))
+  (Result.Error e)
+    (IO.errorln &amp;(Parser.format-error &amp;e)))
 </code></pre>
 <h3>Modules</h3>
 <ul>

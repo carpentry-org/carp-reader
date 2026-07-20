@@ -1025,12 +1025,13 @@ you need it.")
       0))
 
   (doc parse "parses a Carp source string into an array of top-level
-  `Form` forms. Comments are preserved as `Form.Cmt` nodes interspersed
-  with real forms.")
+  nodes, yielding `(Result (Array (Box Located)) ParseErr)`. Use
+  `Located.form` to reach the `Form` inside a `Located`. Comments are
+  preserved as `Form.Cmt` nodes interspersed with real forms.")
   (defn parse [src] (Parser.parse (many-forms) src))
 
-  (doc parse-form "parses exactly one top-level `Form` form. Use
-  `parse` for whole-file inputs.")
+  (doc parse-form "parses exactly one top-level form, yielding
+  `(Result Located ParseErr)`. Use `parse` for whole-file inputs.")
   (defn parse-form [src]
     (Parser.parse
       (Parser.then (skip-ws) (Parser.before (Parser.recurse &*form*) (skip-ws)))
