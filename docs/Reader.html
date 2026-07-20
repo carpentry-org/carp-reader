@@ -434,8 +434,9 @@
                     </pre>
                     <p class="doc">
                         <p>parses a Carp source string into an array of top-level
-<code>Form</code> forms. Comments are preserved as <code>Form.Cmt</code> nodes interspersed
-with real forms.</p>
+nodes, yielding <code>(Result (Array (Box Located)) ParseErr)</code>. Use
+<code>Located.form</code> to reach the <code>Form</code> inside a <code>Located</code>. Comments are
+preserved as <code>Form.Cmt</code> nodes interspersed with real forms.</p>
 
                     </p>
                 </div>
@@ -455,8 +456,8 @@ with real forms.</p>
                         (parse-form src)
                     </pre>
                     <p class="doc">
-                        <p>parses exactly one top-level <code>Form</code> form. Use
-<code>parse</code> for whole-file inputs.</p>
+                        <p>parses exactly one top-level form, yielding
+<code>(Result Located ParseErr)</code>. Use <code>parse</code> for whole-file inputs.</p>
 
                     </p>
                 </div>
