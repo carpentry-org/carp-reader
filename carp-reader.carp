@@ -632,7 +632,8 @@ you need it.")
                                        end digits-start]
                                 (while-do (and (Int.< end len)
                                                (let [d (String.char-at src end)]
-                                                 (and (Char.>= d \0) (Char.<= d \7))))
+                                                 (and (Char.>= d \0)
+                                                      (Char.<= d \7))))
                                   (set! end (Int.inc end)))
                                 (set! bytes
                                       (push-utf8-bytes bytes
@@ -777,7 +778,8 @@ you need it.")
                           ;; so multibyte literals like \ä parse
                           (let [decoded (String.chars &name)]
                             (if (= 1 (Array.length &decoded))
-                              (Parser.pure (Form.Chr @(Array.unsafe-nth &decoded 0)))
+                              (Parser.pure
+                                (Form.Chr @(Array.unsafe-nth &decoded 0)))
                               (match (named-char @&name)
                                 (Maybe.Just c) (Parser.pure (Form.Chr c))
                                 (Maybe.Nothing) (Parser.fail @"named char"))))))
