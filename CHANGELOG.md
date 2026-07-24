@@ -3,6 +3,14 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project follows [Semantic Versioning](https://semver.org/).
 
+## [0.3.8]
+
+- String escapes now pass through the reference compiler's semantics
+  faithfully: unknown escapes pass through as written, runs of digits
+  after `\` are read as decimal character codes, and character literals
+  accept codepoint escapes.
+- The documented `parse` return type and the README example were fixed.
+
 ## [0.3.7]
 
 - Characters above U+FFFF now round-trip through `Form.str`. They are
