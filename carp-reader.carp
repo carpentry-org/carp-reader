@@ -61,15 +61,35 @@ nested. Synthesized nodes (reader-macro expansions) carry
           (StringBuf.append-str &sb (Array.unsafe-nth segs i))))
       (StringBuf.to-string &sb)))
 
+  (private control-code?)
+  (hidden control-code?)
+  (defn control-code? [i] (or (Int.< i 32) (Int.= i 127)))
+
   (private escape-string-byte)
   (hidden escape-string-byte)
   (defn escape-string-byte [b]
-    (cond
-      (Char.= b \\) @"\\\\"
-      (Char.= b \") @"\\\""
-      (Char.= b \tab) @"\\t"
-      (Char.= b \return) @"\\r"
-      (String.from-bytes &[(Byte.from-int (Int.bit-and 255 (Char.to-int b)))])))
+    (let [i (Int.bit-and 255 (Char.to-int b))]
+      (cond
+        (Char.= b \\)
+        @"\\\\"
+        (Char.= b \")
+        @"\\\""
+        (Int.= i 7)
+        @"\\a"
+        (Int.= i 8)
+        @"\\b"
+        (Int.= i 9)
+        @"\\t"
+        (Int.= i 11)
+        @"\\v"
+        (Int.= i 12)
+        @"\\f"
+        (Int.= i 13)
+        @"\\r"
+        ; \xHH is greedy in the reference reader, so \u is the only safe escape.
+        (and (control-code? i) (Int./= i 10))
+        (fmt "\\u%04x" i)
+        (String.from-bytes &[(Byte.from-int i)]))))
 
   (private escape-string)
   (hidden escape-string)
@@ -112,7 +132,7 @@ nested. Synthesized nodes (reader-macro expansions) carry
       ; codepoints above the BMP need \U + 8 digits; \u only re-parses 4.
       (Int.> (Char.to-int c) 65535)
       (fmt "\\U%08x" (Char.to-int c))
-      (Int.> (Char.to-int c) 127)
+      (or (Int.> (Char.to-int c) 127) (control-code? (Char.to-int c)))
       (fmt "\\u%04x" (Char.to-int c))
       (fmt "\\%c" c)))
 
@@ -169,7 +189,9 @@ nested. Synthesized nodes (reader-macro expansions) carry
 
   (doc str "renders a `Form` back to source-like text. Round-trips
   for syntactic content; whitespace around comments is left to the
-  caller's formatting pass.")
+  caller's formatting pass. Non-printable bytes are always escaped, so
+  the output is safe to write back into a source file; the one
+  exception is a literal newline inside a string, which stays raw.")
   (defn str [a]
     (match-ref a
       (Itg n) (Int.str @n)
