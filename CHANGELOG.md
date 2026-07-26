@@ -3,6 +3,15 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+- `Form.str` no longer emits raw control bytes. String literals render
+  `\a`, `\b`, `\v` and `\f` as escapes instead of dropping them to the
+  raw byte, and any other control byte renders as `\uXXXX`; character
+  literals do the same for control codes without a name. Writing
+  `Form.str` output back over a source file no longer corrupts it. A
+  literal newline inside a string is still emitted raw, unchanged.
+
 ## [0.3.8]
 
 - String escapes now pass through the reference compiler's semantics

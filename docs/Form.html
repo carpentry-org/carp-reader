@@ -438,7 +438,9 @@ in Carp source maps to one <code>Form</code> variant. Recursive children are
                     <p class="doc">
                         <p>renders a <code>Form</code> back to source-like text. Round-trips
 for syntactic content; whitespace around comments is left to the
-caller's formatting pass.</p>
+caller's formatting pass. Non-printable bytes are always escaped, so
+the output is safe to write back into a source file; the one
+exception is a literal newline inside a string, which stays raw.</p>
 
                     </p>
                 </div>
