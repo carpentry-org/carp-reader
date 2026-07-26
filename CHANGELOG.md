@@ -10,7 +10,8 @@ the project follows [Semantic Versioning](https://semver.org/).
   raw byte, and any other control byte renders as `\uXXXX`; character
   literals do the same for control codes without a name. Writing
   `Form.str` output back over a source file no longer corrupts it. A
-  literal newline inside a string is still emitted raw, unchanged.
+  literal newline inside a string is still emitted raw, unchanged, and a
+  `\n` escape is still rewritten to a literal newline.
 
 ## [0.3.8]
 
