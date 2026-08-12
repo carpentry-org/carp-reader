@@ -5,6 +5,8 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.9]
+
 - `Form.str` no longer emits raw control bytes. String literals render
   `\a`, `\b`, `\v` and `\f` as escapes instead of dropping them to the
   raw byte, and any other control byte renders as `\uXXXX`; character
