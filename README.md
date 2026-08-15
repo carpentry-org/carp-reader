@@ -6,7 +6,7 @@ in which Carp gets parsed into a structured `Form` AST. Built on
 ## Install
 
 ```clojure
-(load "git@github.com:carpentry-org/carp-reader@0.3.9")
+(load "git@github.com:carpentry-org/carp-reader@0.4.0")
 ```
 
 ## Example

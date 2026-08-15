@@ -5,6 +5,9 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0]
+
+- `parsec` bumped to 0.6.1 and `strbuf` to 0.2.1.
 - Malformed `\u`, `\U` and `\x` escapes inside string literals no longer
   fail the parse. They pass through verbatim, as the reference compiler
   reads them. A single digit after a backslash (`\0`, `\1`, `\7`) also
