@@ -9,7 +9,7 @@ the project follows [Semantic Versioning](https://semver.org/).
   fail the parse. They pass through verbatim, as the reference compiler
   reads them. A single digit after a backslash (`\0`, `\1`, `\7`) also
   passes through instead of reading as a character code; two or more
-  digits still read as one character code.
+  octal digits still read as one character code.
 
 ## [0.3.9]
 
