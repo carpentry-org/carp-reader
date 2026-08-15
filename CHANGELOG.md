@@ -7,10 +7,9 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 - Malformed `\u`, `\U` and `\x` escapes inside string literals no longer
   fail the parse. They pass through verbatim, as the reference compiler
-  reads them, so files that `carp` compiles are no longer rejected. A
-  single digit after a backslash (`\0`, `\1`, `\7`) also passes through
-  instead of reading as a character code; two or more digits still read
-  as one character code.
+  reads them. A single digit after a backslash (`\0`, `\1`, `\7`) also
+  passes through instead of reading as a character code; two or more
+  digits still read as one character code.
 
 ## [0.3.9]
 
