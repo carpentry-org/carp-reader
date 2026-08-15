@@ -5,6 +5,12 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Malformed `\u`, `\U` and `\x` escapes inside string literals no longer
+  fail the parse. They pass through verbatim, as the reference compiler
+  reads them. A single digit after a backslash (`\0`, `\1`, `\7`) also
+  passes through instead of reading as a character code; two or more
+  octal digits still read as one character code.
+
 ## [0.3.9]
 
 - `Form.str` no longer emits raw control bytes. String literals render

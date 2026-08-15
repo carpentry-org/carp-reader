@@ -18,6 +18,12 @@
         @(Info.col (Located.info (Box.peek (Array.unsafe-nth items 0))))
       _ -1)))
 
+(defn str-bytes [src]
+  (match (Reader.parse-form src)
+    (Result.Success l)
+      (match-ref (Located.form &l) (Str s) (String.to-bytes s) _ [])
+    (Result.Error _) []))
+
 (defn is-double? [s]
   (let [loc (first-form s)] (match-ref (Located.form &loc) (Dbl _) true _ false)))
 
@@ -265,13 +271,62 @@ b\"")) "string with literal newline stays as literal newline")
   ; character code, matching the reference compiler's reader
   (assert-false t (parse-error? "\"\\z\"") "unknown escape \\z passes through")
   (assert-false t (parse-error? "\"\\q\"") "unknown escape \\q passes through")
-  (assert-false t (parse-error? "\"\\0\"") "\\0 reads as a character code")
-  (assert-true t (parse-error? "\"\\x\"") "\\x without hex digits errors")
-  (assert-true t (parse-error? "\"\\xZZ\"") "\\x with non-hex chars errors")
-  (assert-true t (parse-error? "\"\\uGHIJ\"") "\\u with non-hex chars errors")
-  (assert-true t
-    (parse-error? "\"\\U0000GHIJ\"")
-    "\\U with non-hex chars errors")
+
+  ; a malformed \u, \U or \x, and a digit run shorter than two digits, are
+  ; passed through verbatim by the reference; these pin its measured bytes
+  (assert-equal t
+    &[92b 117b 49b 50b]
+    &(str-bytes "\"\\u12\"")
+    "\\u with too few hex digits passes through")
+  (assert-equal t
+    &[92b 117b 90b 90b 90b 90b]
+    &(str-bytes "\"\\uZZZZ\"")
+    "\\u with non-hex chars passes through")
+  (assert-equal t
+    &[92b 117b 71b 72b 73b 74b]
+    &(str-bytes "\"\\uGHIJ\"")
+    "\\u with hex-adjacent chars passes through")
+  (assert-equal t
+    &[92b 85b 52b 49b]
+    &(str-bytes "\"\\U41\"")
+    "\\U with too few hex digits passes through")
+  (assert-equal t
+    &[92b 85b 48b 48b 48b 48b 71b 72b 73b 74b]
+    &(str-bytes "\"\\U0000GHIJ\"")
+    "\\U with non-hex chars passes through")
+  (assert-equal t
+    &[92b 120b]
+    &(str-bytes "\"\\x\"")
+    "\\x without hex digits passes through")
+  (assert-equal t
+    &[92b 120b 90b]
+    &(str-bytes "\"\\xZ\"")
+    "\\x with a non-hex char passes through")
+  (assert-equal t
+    &[92b 120b 90b 90b]
+    &(str-bytes "\"\\xZZ\"")
+    "\\x with non-hex chars passes through")
+  (assert-equal t &[92b 49b] &(str-bytes "\"\\1\"") "\\1 passes through")
+  (assert-equal t &[92b 55b] &(str-bytes "\"\\7\"") "\\7 passes through")
+  (assert-equal t &[92b 48b] &(str-bytes "\"\\0\"") "\\0 passes through")
+  (assert-equal t &[92b 57b] &(str-bytes "\"\\9\"") "\\9 passes through")
+  (assert-equal t
+    &[92b 48b 56b]
+    &(str-bytes "\"\\08\"")
+    "\\08 is one digit and passes through")
+  (assert-equal t
+    &[92b 49b 56b]
+    &(str-bytes "\"\\18\"")
+    "\\18 is one digit and passes through")
+  (assert-equal t
+    &[18b]
+    &(str-bytes "\"\\12\"")
+    "a two-digit run reads as one character code")
+  (assert-equal t
+    &[196b 163b]
+    &(str-bytes "\"\\123\"")
+    "a longer digit run reads as one character code")
+  (assert-equal t &[65b] &(str-bytes "\"\\x41\"") "\\x41 still reads as A")
 
   (assert-equal t
     0
