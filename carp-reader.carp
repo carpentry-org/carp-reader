@@ -475,8 +475,10 @@ you need it.")
                                     (if is-float
                                       (Form.Flt (Double.to-float d))
                                       (Form.Dbl d))
-                                    (Cursor.advance-string cur src start
-                                                       (Int.- post start)))
+                                    (Cursor.advance-string cur
+                                                           src
+                                                           start
+                                                           (Int.- post start)))
                                 (Maybe.Nothing)
                                   (Reply.ErrConsumed
                                     (ParseErr.expected-at cur
@@ -487,8 +489,11 @@ you need it.")
                       (let-do [exp-end (scan-exponent src len pos)]
                         (if (Int.= exp-end pos)
                           (Reply.OkConsumed (Form.Itg (Long.to-int int-value))
-                                            (Cursor.advance-string cur src start
-                                                               (Int.- pos start)))
+                                            (Cursor.advance-string cur
+                                                                   src
+                                                                   start
+                                                                   (Int.- pos
+                                                                          start)))
                           (let-do [post exp-end
                                    is-float false]
                             (when-do (and (Int.< post len)
@@ -502,8 +507,10 @@ you need it.")
                                     (if is-float
                                       (Form.Flt (Double.to-float d))
                                       (Form.Dbl d))
-                                    (Cursor.advance-string cur src start
-                                                       (Int.- post start)))
+                                    (Cursor.advance-string cur
+                                                           src
+                                                           start
+                                                           (Int.- post start)))
                                 (Maybe.Nothing)
                                   (Reply.ErrConsumed
                                     (ParseErr.expected-at cur
@@ -513,26 +520,35 @@ you need it.")
                     (Char.= next-c \b)
                       (Reply.OkConsumed
                         (Form.Byt (Byte.from-int (Long.to-int int-value)))
-                        (Cursor.advance-string cur src start (Int.- (Int.inc pos) start)))
+                        (Cursor.advance-string cur
+                                               src
+                                               start
+                                               (Int.- (Int.inc pos) start)))
                     (Char.= next-c \l)
                       (Reply.OkConsumed (Form.Lng int-value)
-                                        (Cursor.advance-string cur src start
-                                                           (Int.- (Int.inc pos)
-                                                                  start)))
+                                        (Cursor.advance-string cur
+                                                               src
+                                                               start
+                                                               (Int.- (Int.inc pos)
+                                                                      start)))
                     (Char.= next-c \f)
                       (let [num-text (String.byte-slice src start pos)]
                         (match (Double.from-string &num-text)
                           (Maybe.Just d)
                             (Reply.OkConsumed (Form.Flt (Double.to-float d))
-                                              (Cursor.advance-string cur src start
-                                                                 (Int.- (Int.inc pos)
-                                                                        start)))
+                                              (Cursor.advance-string cur
+                                                                     src
+                                                                     start
+                                                                     (Int.- (Int.inc pos)
+                                                                            start)))
                           (Maybe.Nothing)
                             (Reply.ErrConsumed (ParseErr.expected-at cur
                                                                      @"float"))))
                     (Reply.OkConsumed (Form.Itg (Long.to-int int-value))
-                                      (Cursor.advance-string cur src start
-                                                         (Int.- pos start))))))))))))
+                                      (Cursor.advance-string cur
+                                                             src
+                                                             start
+                                                             (Int.- pos start))))))))))))
 
   (private string-)
   (hidden string-)
