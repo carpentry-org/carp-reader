@@ -238,6 +238,35 @@
   (assert-equal t 2 @(Info.line (Located.end &(first-form "(a
  b)"))) "multi-line form's end line tracks where it closed")
 
+  (assert-equal t
+    3
+    @(Info.col (Located.end &(first-form "42")))
+    "a number ends one column past its last digit")
+  (assert-equal t
+    4
+    @(Info.col (Located.end &(first-form "1.5")))
+    "every byte of a number is a column")
+  (assert-equal t
+    7
+    @(Info.col (Located.end &(first-form "(m 10)")))
+    "a form whose last element is a number ends after its closing paren")
+  (assert-equal t
+    5
+    @(Info.col (Located.end &(first-form "100b")))
+    "a byte literal counts its suffix")
+  (assert-equal t
+    4
+    @(Info.col (Located.end &(first-form "42l")))
+    "a long literal counts its suffix")
+  (assert-equal t
+    5
+    @(Info.col (Located.end &(first-form "1.5f")))
+    "a float literal counts its suffix")
+  (assert-equal t
+    5
+    @(Info.col (Located.end &(first-form "1e10")))
+    "an exponent counts every byte")
+
   (assert-equal t "\"a
 b\"" &(Located.str &(first-form "\"a
 b\"")) "string with literal newline stays as literal newline")

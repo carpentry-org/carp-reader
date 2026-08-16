@@ -5,6 +5,15 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.1]
+
+- Numeric literals now advance the column by every byte they occupy. The
+  number parsers moved the cursor with `Cursor.advance-by`, which counts a
+  whole span as one column because it exists for multi-byte UTF-8
+  codepoints; a number's bytes are each a column. Any form whose last
+  element was a number reported an end column short by the length of that
+  number, so a caller highlighting or underlining such a form stopped short.
+
 ## [0.4.0]
 
 - `parsec` bumped to 0.6.1 and `strbuf` to 0.2.1.
