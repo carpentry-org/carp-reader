@@ -5,6 +5,10 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- `Double.format` calls become `Double.unsafe-format`, following the rename
+  of the `format` interface in Carp core (carp-lang/Carp#1432). Requires a
+  Carp that carries the rename.
+
 ## [0.4.1]
 
 - Numeric literals now advance the column by every byte they occupy. The
