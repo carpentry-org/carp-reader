@@ -172,15 +172,17 @@ nested. Synthesized nodes (reader-macro expansions) carry
   (defn double-str [d]
     (let-do [s (Double.str d)]
       (when (or (not (decimal-only? &s)) (not (double-round-trips? &s d)))
-        (set! s (Double.format "%.17g" d)))
+        (set! s (Double.unsafe-format "%.17g" d)))
       (unless-do (decimal-only? &s)
         (let-do [precs [17 21 25 30 40 50 70 100 150 220 330]
                  n (Array.length &precs)
                  i 0]
           (while-do (Int.< i n)
+            ; `%%` escapes, so fmt-str carries exactly one directive
             (let-do [p @(Array.unsafe-nth &precs i)
                      fmt-str (fmt "%%.%df" p)
-                     candidate (strip-trailing-zeros &(Double.format &fmt-str d))]
+                     candidate (strip-trailing-zeros &(Double.unsafe-format &fmt-str
+                                                                            d))]
               (when-do (double-round-trips? &candidate d)
                 (set! s candidate)
                 (set! i n)))
