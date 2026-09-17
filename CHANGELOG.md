@@ -5,6 +5,12 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.2]
+
+- `parsec` bumped to 0.6.2 and `strbuf` to 0.3.0.
+- The render helpers hand their buffers to the returned strings with
+  `StringBuf.into-string` instead of copying them.
+
 ## [0.4.1]
 
 - Numeric literals now advance the column by every byte they occupy. The

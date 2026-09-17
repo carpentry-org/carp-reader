@@ -1,5 +1,5 @@
-(load "git@github.com:carpentry-org/parsec@0.6.1")
-(load "git@github.com:carpentry-org/strbuf@0.2.1")
+(load "git@github.com:carpentry-org/parsec@0.6.2")
+(load "git@github.com:carpentry-org/strbuf@0.3.0")
 
 (doc Info "is the parser-captured source position of a form: byte
 offset `pos`, `line`, and `col`.")
@@ -49,7 +49,7 @@ nested. Synthesized nodes (reader-macro expansions) carry
                                 &(Form.str
                                   (Located.form (Box.peek (Array.unsafe-nth items
                                                                             i)))))))
-      (StringBuf.to-string &sb)))
+      (StringBuf.into-string sb)))
 
   (private join-segments)
   (hidden join-segments)
@@ -59,7 +59,7 @@ nested. Synthesized nodes (reader-macro expansions) carry
         (do
           (when (Int.> i 0) (StringBuf.append-str &sb "."))
           (StringBuf.append-str &sb (Array.unsafe-nth segs i))))
-      (StringBuf.to-string &sb)))
+      (StringBuf.into-string sb)))
 
   (private control-code?)
   (hidden control-code?)
@@ -109,7 +109,7 @@ nested. Synthesized nodes (reader-macro expansions) carry
             (do
               (StringBuf.append-str &sb &(escape-string-byte b))
               (set! i (Int.inc i))))))
-      (StringBuf.to-string &sb)))
+      (StringBuf.into-string sb)))
 
   (private show-char)
   (hidden show-char)
