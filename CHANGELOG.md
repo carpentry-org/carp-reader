@@ -5,6 +5,8 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.3]
+
 - `Double.format` calls become `Double.unsafe-format`, following the rename
   of the `format` interface in Carp core (carp-lang/Carp#1432). Requires a
   Carp that carries the rename.
