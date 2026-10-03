@@ -129,9 +129,12 @@ nested. Synthesized nodes (reader-macro expansions) carry
       @"\\formfeed"
       (Char.= c \")
       @"\\\""
-      ; codepoints above the BMP need \U + 8 digits; \u only re-parses 4.
-      (Int.> (Char.to-int c) 65535)
+      ; past U+10FFFF there is no raw spelling; only this reader takes \U.
+      (Int.> (Char.to-int c) 1114111)
       (fmt "\\U%08x" (Char.to-int c))
+      ; Carp's char literals have no escape above the BMP, only the raw char.
+      (Int.> (Char.to-int c) 65535)
+      (Char.prn c)
       (or (Int.> (Char.to-int c) 127) (control-code? (Char.to-int c)))
       (fmt "\\u%04x" (Char.to-int c))
       (fmt "\\%c" c)))
@@ -189,6 +192,45 @@ nested. Synthesized nodes (reader-macro expansions) carry
             (set! i (Int.inc i)))))
       (if (String.contains? &s \.) s (String.append &s ".0"))))
 
+  (private float-round-trips?)
+  (hidden float-round-trips?)
+  (defn float-round-trips? [s f]
+    (match (Double.from-string s)
+      (Maybe.Just d) (Float.= (Double.to-float d) f)
+      (Maybe.Nothing) false))
+
+  (private expand-exponent)
+  (hidden expand-exponent)
+  ; Carp's lexer has no exponent syntax, so `-1.5e-07` becomes `-0.00000015`.
+  (defn expand-exponent [s]
+    (let [e (String.index-of s \e)]
+      (if (Int.< e 0)
+        @s
+        (let [mantissa (String.chars &(String.byte-slice s 0 e))
+              digits (String.from-chars
+                &(Array.endo-filter &(fn [c] (Char.num? @c)) mantissa))
+              suffix (String.byte-slice s (Int.inc e) (String.length s))
+              exponent (Maybe.from (Int.from-string &suffix) 0)
+              sign (if (String.starts-with? s "-") "-" "")]
+          (if (Int.< exponent 0)
+            (fmt "%s0.%s%s"
+                 sign
+                 &(String.repeat (Int.- -1 exponent) "0")
+                 &digits)
+            (let [zeros (Int.- (Int.inc exponent) (String.length &digits))]
+              (fmt "%s%s%s" sign &digits &(String.repeat zeros "0"))))))))
+
+  (private float-str)
+  (hidden float-str)
+  ; the fewest significant digits that read back as `f`; 9 always do.
+  (defn float-str [f]
+    (let-do [p 1
+             s (Float.unsafe-format "%.1g" f)]
+      (while-do (and (Int.< p 9) (not (float-round-trips? &s f)))
+        (set! p (Int.inc p))
+        (set! s (Float.unsafe-format &(fmt "%%.%dg" p) f)))
+      (String.append &(expand-exponent &s) "f")))
+
   (doc str "renders a `Form` back to source-like text. Round-trips
   for syntactic content; whitespace around comments is left to the
   caller's formatting pass. Non-printable bytes are always escaped, so
@@ -199,7 +241,7 @@ nested. Synthesized nodes (reader-macro expansions) carry
       (Itg n) (Int.str @n)
       (Byt b) (Byte.str @b)
       (Lng n) (String.append &(Long.str @n) "l")
-      (Flt f) (Float.str @f)
+      (Flt f) (float-str @f)
       (Dbl d) (double-str @d)
       (Bol b) (if @b @"true" @"false")
       (Chr c) (show-char @c)

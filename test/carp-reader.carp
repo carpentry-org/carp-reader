@@ -69,6 +69,25 @@
     (for [i 1 256] (unless (char-code-round-trips? i) (set! n (Int.inc n))))
     n))
 
+(defn float-value-round-trips? [f]
+  (let [rendered (Form.str &(Form.Flt f))]
+    (and (not (String.contains? &rendered \e))
+         (match (Reader.parse-form &rendered)
+           (Result.Success l)
+             (match-ref (Located.form &l) (Flt g) (Float.= @g f) _ false)
+           (Result.Error _) false))))
+
+(defn bad-floats []
+  (let-do [n 0
+           mantissas [1.0 1.2345678 1.9]]
+    (for [e -149 128]
+      (for [i 0 (Array.length &mantissas)]
+        (let-do [f (Double.to-float
+                   (Double.ldexp @(Array.unsafe-nth &mantissas i) e))]
+          (unless (float-value-round-trips? f) (set! n (Int.inc n)))
+          (unless (float-value-round-trips? (Float.neg f)) (set! n (Int.inc n))))))
+    n))
+
 (deftest t
   (assert-equal t 1 (Array.length &(unsafe-parse "42")) "parse: single integer")
   (assert-equal t "42" &(Located.str &(first-form "42")) "round-trip: integer")
@@ -82,6 +101,22 @@
     "2f"
     &(Located.str &(first-form "2f"))
     "round-trip: float no period")
+  (assert-equal t
+    "0.00001f"
+    &(Located.str &(first-form "0.00001f"))
+    "small float renders without an exponent")
+  (assert-equal t
+    "16777216f"
+    &(Located.str &(first-form "16777217.0f"))
+    "float above 2^24 renders in full digits")
+  (assert-equal t
+    "1.0000001f"
+    &(Located.str &(first-form "1.0000001f"))
+    "float keeps every digit it needs")
+  (assert-equal t
+    0
+    (bad-floats)
+    "floats at every binary exponent re-parse identically, with no exponent")
   (assert-equal t
     "3.14"
     &(Located.str &(first-form "3.14"))
@@ -101,13 +136,21 @@
     (Array.length &(unsafe-parse "\\U0001f600"))
     "char above BMP parses as a single form")
   (assert-equal t
-    "\\U0001f600"
-    &(Located.str &(first-form "\\U0001f600"))
-    "round-trip: char above BMP via \\U")
+    "\\😀"
+    &(Located.str &(first-form "\\😀"))
+    "round-trip: raw char above BMP")
   (assert-equal t
-    "\\U00010000"
+    "\\😀"
+    &(Located.str &(first-form "\\U0001f600"))
+    "char above BMP written with \\U renders raw")
+  (assert-equal t
+    "\\𐀀"
     &(Located.str &(first-form "\\U00010000"))
-    "round-trip: first astral codepoint via \\U")
+    "first astral codepoint renders raw")
+  (assert-equal t
+    "\\U00110000"
+    &(Located.str &(first-form "\\U00110000"))
+    "char past U+10FFFF keeps its \\U escape")
   (assert-equal t
     "\\uffff"
     &(Located.str &(first-form "\\uffff"))
