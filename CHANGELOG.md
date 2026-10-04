@@ -5,6 +5,10 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- `Form.str` renders Float literals without an exponent or lost digits, and
+  characters above U+FFFF raw instead of as `\U` escapes, so both read back
+  in the Carp compiler.
+
 ## [0.4.3]
 
 - `Double.format` calls become `Double.unsafe-format`, following the rename
