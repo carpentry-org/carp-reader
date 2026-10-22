@@ -11,9 +11,15 @@ the project follows [Semantic Versioning](https://semver.org/).
   delimiter punctuation, reader prefixes, source ranges, and recovery issues.
   `ReaderDocument.status` distinguishes complete, incomplete, and invalid input;
   `Reader.node-category` supplies reader-owned lexical categories.
-- `Reader.forms` lowers issue-free documents to located forms. `Reader.parse`
-  and `Reader.parse-form` use the same reader and reject recovered syntax.
-- CI runs both the strict parsing suite and the lossless editing suite.
+- `Reader.forms` borrows issue-free documents and lowers them to located forms.
+  Strict parsing and lossless reading share one grammar and recovery path,
+  with separate builders for compiler forms and syntax documents. Group and
+  reader-macro lowering is shared with `Reader.forms`.
+- Completed nodes and prefix operands move into their parents. A shared
+  delimiter stack and direct symbol-segment collection avoid repeated copies.
+- CI runs strict parsing, lossless editing, builder equivalence, and ownership
+  suites. Copy-count checks have positive controls; a benchmark driver measures
+  strict and lossless reading separately.
 
 - `Form.str` renders Float literals without an exponent or lost digits, and
   characters above U+FFFF raw instead of as `\U` escapes, so both read back

@@ -46,10 +46,15 @@ Each `ReaderIssue` distinguishes incomplete from invalid syntax and retains
 the ordinary `ParseErr`. Definite invalid syntax takes precedence when a
 document also has missing syntax.
 
-`Reader.forms` lowers a document only when it has no issues. It returns the
-same located forms as `Reader.parse`, including reader-macro lowering.
-`Reader.parse` now reads this tree and calls `Reader.forms`; strict parsing and
-editing share one grammar. Recovery never makes invented syntax executable.
+`Reader.forms` borrows a document and lowers it only when it has no issues.
+It returns the same located forms as `Reader.parse`, including reader-macro
+lowering, and preserves the document for further inspection.
+
+Strict parsing and editing share one grammar and recovery implementation.
+Two internal builders consume its results: `Reader.read-syntax` retains written
+syntax, while `Reader.parse` constructs compiler forms directly. Both paths
+reject recovered syntax as compiler input and share the group and reader-macro
+lowering functions.
 
 ## Located
 
