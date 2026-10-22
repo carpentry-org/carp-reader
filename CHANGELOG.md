@@ -5,6 +5,8 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-22
+
 - `Reader.read-syntax` returns a lossless `ReaderDocument`, retaining trivia,
   delimiter punctuation, reader prefixes, source ranges, and recovery issues.
   `ReaderDocument.status` distinguishes complete, incomplete, and invalid input;
