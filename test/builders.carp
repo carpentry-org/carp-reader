@@ -1,0 +1,137 @@
+(load "../carp-reader.carp")
+(load "Test.carp")
+(Project.no-echo)
+(use-all Test)
+
+; Compare constructor tags, round-trippable values, and every nested span.
+; Error fingerprints include the byte offset and the ordinary diagnostic.
+(defn form-tag [form]
+  (match-ref form
+    (Form.Itg _) 0
+    (Form.Byt _) 1
+    (Form.Lng _) 2
+    (Form.Flt _) 3
+    (Form.Dbl _) 4
+    (Form.Bol _) 5
+    (Form.Chr _) 6
+    (Form.Str _) 7
+    (Form.Pat _) 8
+    (Form.Sym _) 9
+    (Form.Lst _) 10
+    (Form.Arr _) 11
+    (Form.StaticArr _) 12
+    (Form.Dict _) 13
+    (Form.Cmt _) 14))
+
+(register fingerprint-forms (Fn [(Ref (Array (Box Located)))] String))
+
+(defn fingerprint-located [located]
+  (let [form (Located.form located)
+        begin (Located.info located)
+        end (Located.end located)
+        children (match-ref form
+          (Form.Lst items) (fingerprint-forms items)
+          (Form.Arr items) (fingerprint-forms items)
+          (Form.StaticArr items) (fingerprint-forms items)
+          (Form.Dict items) (fingerprint-forms items)
+          _ @"")
+        value (Form.str form)]
+    (fmt "%d %d %d %d %d %d %d %d:%s %d:%s"
+         (form-tag form)
+         @(Info.pos begin)
+         @(Info.line begin)
+         @(Info.col begin)
+         @(Info.pos end)
+         @(Info.line end)
+         @(Info.col end)
+         (String.length &value)
+         &value
+         (String.length &children)
+         &children)))
+
+(defn fingerprint-forms [forms]
+  (let-do [pieces (the (Array String) [])]
+    (for [i 0 (Array.length forms)]
+      (Array.push-back! &pieces
+                        (fingerprint-located (Box.peek (Array.unsafe-nth forms i)))))
+    (String.join "\n" &pieces)))
+
+(defn fingerprint [result]
+  (match-ref result
+    (Result.Success forms) (String.append "Success " &(fingerprint-forms forms))
+    (Result.Error error)
+      (fmt "Error %d %s" @(ParseErr.pos error) &(Parser.format-error error))))
+
+(defn builders-agree? [source]
+  (let [direct (Reader.parse source)
+        document (Reader.read-syntax source)
+        lowered (Reader.forms &document)
+        direct-value (fingerprint &direct)
+        lowered-value (fingerprint &lowered)]
+    (if (String.= &direct-value &lowered-value)
+      true
+      (do
+        (IO.errorln
+          &(fmt
+            "reader builders disagree on %s\ndirect: %s\nlowered: %s"
+            source
+            &direct-value
+            &lowered-value))
+        false))))
+
+(defn corpus-agrees? [sources]
+  (let-do [okay true]
+    (for [i 0 (Array.length sources)]
+      (unless (builders-agree? (Array.unsafe-nth sources i)) (set! okay false)))
+    okay))
+
+(defn prefixes-agree? [source]
+  (let-do [okay true]
+    (for [i 0 (Int.inc (String.length source))]
+      (unless (builders-agree? &(String.byte-slice source 0 i))
+        (set! okay false)))
+    okay))
+
+(defn short-inputs-agree? [source depth]
+  (and (builders-agree? source)
+       (or (Int.= depth 0)
+           (let-do [alphabet "()[]{}'x ."
+                    okay true]
+             (for [i 0 (String.length alphabet)]
+               (unless (short-inputs-agree?
+                   &(String.append source
+                                   &(Char.str (String.char-at alphabet i)))
+                   (Int.dec depth))
+                 (set! okay false)))
+             okay))))
+
+(deftest test
+  (assert-true test
+    (corpus-agrees?
+      &[@""
+        @" \t\r\n,"
+        @"; comment\nnext"
+        @"true false true.member"
+        @"a.b.c -12 0xff 3.5f 1e3"
+        @"(x [1 2] $[3] {4 5})"
+        @"'`%~@&x %@([λ])"
+        @"&;comment"
+        @"\"a\\n\\u1234\" r\"a\"\"b\" #\"[x]\" \\space"
+        @"([)] later"
+        @"(bad] ) later"
+        @"([) [next]"
+        @"& value"
+        @"a."
+        @"-no."
+        @"\\unknown"
+        @"#bad"
+        @"\"unfinished\\"
+        @"%@"])
+    "builders agree on forms, positions, macros, and recovery errors")
+  (assert-true test
+    (prefixes-agree?
+      "(defn λ [x] (do ; note\n r\"a\"\"b\" #\"[x]\" \\u1234 %@x))")
+    "builders agree at every byte boundary of an editing buffer")
+  (assert-true test
+    (short-inputs-agree? "" 3)
+    "builders agree on all short delimiter, prefix, symbol, and trivia inputs"))

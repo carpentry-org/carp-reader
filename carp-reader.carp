@@ -331,8 +331,19 @@ do not discard syntax. Conversion to compiler forms requires no issues.")
 
 (deftype ReaderAtom (Parsed [ReaderCategory (Reply Form)]))
 
-(deftype ReaderStep [node ReaderNode
-                     cursor Cursor])
+(deftype ReaderPrefix
+  (Present [String Int])
+  (Absent []))
+
+; The grammar owns recognition and recovery; builders own representation.
+; Leaf events carry no children array, so dropping trivia does not allocate.
+(deftype (ReaderShape a)
+  (Leaf [ReaderNodeKind])
+  (Group [ReaderGroup (Array (Box a))])
+  (Prefix [String Info (Maybe a)]))
+
+(deftype (ReaderStep a) (Parsed [(Maybe a) Cursor]))
+(deftype (ReaderOutput a) (Read [(Array (Box a)) (Array ReaderIssue)]))
 
 (defmodule Reader
   (private ws-byte?)
@@ -940,24 +951,15 @@ do not discard syntax. Conversion to compiler forms requires no issues.")
   (hidden symbol-)
   (defn symbol- []
     (Parser.map
-      (Parser.label @"symbol"
-                    (Parser.seq (segment)
-                                (Parser.many
-                                  (Parser.bind (Parser.byte \.)
-                                               (fn [_] (segment))))))
-      (fn [outer]
-        (let [first @(Pair.a &outer)
-              rest @(Pair.b &outer)]
-          (let-do [segs [first]]
-            (for [i 0 (Array.length &rest)]
-              (set! segs (Array.push-back segs @(Array.unsafe-nth &rest i))))
-            (if (Int.= 1 (Array.length &segs))
-              (let [only (Array.unsafe-nth &segs 0)]
-                (cond
-                  (= only "true") (Form.Bol true)
-                  (= only "false") (Form.Bol false)
-                  (Form.Sym segs)))
-              (Form.Sym segs)))))))
+      (Parser.label @"symbol" (Parser.sep-by1 (segment) (Parser.byte \.)))
+      (fn [segments]
+        (if (Int.= 1 (Array.length &segments))
+          (let [only (Array.unsafe-nth &segments 0)]
+            (cond
+              (= only "true") (Form.Bol true)
+              (= only "false") (Form.Bol false)
+              (Form.Sym segments)))
+          (Form.Sym segments)))))
 
   (private comment-)
   (hidden comment-)
@@ -975,7 +977,70 @@ do not discard syntax. Conversion to compiler forms requires no issues.")
 
   (private leaf)
   (hidden leaf)
-  (defn leaf [kind begin end] (ReaderNode.init kind (info begin) (info end) []))
+  (defn leaf [builder kind begin end]
+    (~builder (ReaderShape.Leaf kind) (info begin) (info end)))
+
+  (private append!)
+  (hidden append!)
+  (defn append! [children node]
+    (match node
+      (Maybe.Just value) (Array.push-back! children (Box.init value))
+      (Maybe.Nothing) ()))
+
+  (private group-form)
+  (hidden group-form)
+  (defn group-form [group children]
+    (match group
+      (ReaderGroup.List) (Form.Lst children)
+      (ReaderGroup.Array) (Form.Arr children)
+      (ReaderGroup.StaticArray) (Form.StaticArr children)
+      (ReaderGroup.Dictionary) (Form.Dict children)))
+
+  (private prefix-form)
+  (hidden prefix-form)
+  (defn prefix-form [name operand]
+    (Form.Lst
+      [(Box.init
+         (Located.init (Form.Sym [name]) (Info.synthetic) (Info.synthetic)))
+       (Box.init operand)]))
+
+  (private build-form)
+  (hidden build-form)
+  (defn build-form [shape begin end]
+    (let [value (match shape
+            (ReaderShape.Leaf (ReaderNodeKind.Atom form)) (Maybe.Just form)
+            (ReaderShape.Leaf _) (Maybe.Nothing)
+            (ReaderShape.Group group children)
+              (Maybe.Just (group-form group children))
+            (ReaderShape.Prefix name _ operand)
+              (match operand
+                (Maybe.Just value) (Maybe.Just (prefix-form name value))
+                (Maybe.Nothing) (Maybe.Nothing)))]
+      (match value
+        (Maybe.Just form) (Maybe.Just (Located.init form begin end))
+        (Maybe.Nothing) (Maybe.Nothing))))
+
+  (private build-syntax)
+  (hidden build-syntax)
+  (defn build-syntax [shape begin end]
+    (match shape
+      (ReaderShape.Leaf kind) (Maybe.Just (ReaderNode.init kind begin end []))
+      (ReaderShape.Group group children)
+        (Maybe.Just
+          (ReaderNode.init (ReaderNodeKind.Group group) begin end children))
+      (ReaderShape.Prefix name prefix-end operand)
+        (let-do [prefix-children [(Box.init
+                                    (ReaderNode.init
+                                      (ReaderNodeKind.Punctuation (ReaderCategory.Prefix))
+                                      @&begin
+                                      prefix-end
+                                      []))]]
+          (append! &prefix-children operand)
+          (Maybe.Just
+            (ReaderNode.init (ReaderNodeKind.ReaderMacro name)
+                             begin
+                             end
+                             prefix-children)))))
 
   (private category)
   (hidden category)
@@ -1051,17 +1116,17 @@ do not discard syntax. Conversion to compiler forms requires no issues.")
   (defn prefix [source length position]
     (let [c (String.char-at source position)]
       (cond
-        (Char.= c \&) (Pair.init @"ref" 1)
-        (Char.= c \~) (Pair.init @"deref" 1)
-        (Char.= c \@) (Pair.init @"copy" 1)
-        (Char.= c \') (Pair.init @"quote" 1)
-        (Char.= c \`) (Pair.init @"quasiquote" 1)
+        (Char.= c \&) (ReaderPrefix.Present @"ref" 1)
+        (Char.= c \~) (ReaderPrefix.Present @"deref" 1)
+        (Char.= c \@) (ReaderPrefix.Present @"copy" 1)
+        (Char.= c \') (ReaderPrefix.Present @"quote" 1)
+        (Char.= c \`) (ReaderPrefix.Present @"quasiquote" 1)
         (Char.= c \%)
           (if (and (Int.< (Int.inc position) length)
                    (Char.= (String.char-at source (Int.inc position)) \@))
-            (Pair.init @"unquote-splicing" 2)
-            (Pair.init @"unquote" 1))
-        (Pair.init @"" 0))))
+            (ReaderPrefix.Present @"unquote-splicing" 2)
+            (ReaderPrefix.Present @"unquote" 1))
+        (ReaderPrefix.Absent))))
 
   (private closing?)
   (hidden closing?)
@@ -1084,16 +1149,17 @@ do not discard syntax. Conversion to compiler forms requires no issues.")
   (hidden read-node)
   (register read-node
     (Fn
-      [(Ref String)
+      [(Ref (Fn [(ReaderShape a) Info Info] (Maybe a)))
+       (Ref String)
        Int
        (Ref Cursor)
        (Ref (Array Char))
        (Ref (Array ReaderIssue))]
-      ReaderStep))
+      (ReaderStep a)))
 
   (private missing)
   (hidden missing)
-  (defn missing [issues cursor expected incomplete]
+  (defn missing [builder issues cursor expected incomplete]
     (do
       (issue! issues
               (if incomplete
@@ -1102,11 +1168,14 @@ do not discard syntax. Conversion to compiler forms requires no issues.")
               cursor
               cursor
               (ParseErr.expected-at cursor (String.copy expected)))
-      (leaf (ReaderNodeKind.Missing (String.copy expected)) cursor cursor)))
+      (leaf builder
+            (ReaderNodeKind.Missing (String.copy expected))
+            cursor
+            cursor)))
 
   (private read-group)
   (hidden read-group)
-  (defn read-group [source length begin parents issues]
+  (defn read-group [builder source length begin parents issues]
     (let-do [first (String.char-at source @(Cursor.pos begin))
              closing (cond (Char.= first \() \) (Char.= first \{) \} \])
              group (cond
@@ -1119,90 +1188,77 @@ do not discard syntax. Conversion to compiler forms requires no issues.")
                                            source
                                            @(Cursor.pos begin)
                                            count)
-             children [(Box.init
-                         (leaf
-                           (ReaderNodeKind.Punctuation (ReaderCategory.Open))
-                           begin
-                           &cursor))]
-             ancestors (Array.copy parents)
+             children []
              done false]
-      (Array.push-back! &ancestors closing)
+      (append! &children
+               (leaf builder
+                     (ReaderNodeKind.Punctuation (ReaderCategory.Open))
+                     begin
+                     &cursor))
+      (Array.push-back! parents closing)
       (while-do (not done)
         (cond
           (Int.>= @(Cursor.pos &cursor) length)
             (do
-              (Array.push-back! &children
-                                (Box.init
-                                  (missing issues
-                                           &cursor
-                                           &(Char.str closing)
-                                           true)))
+              (append! &children
+                       (missing builder issues &cursor &(Char.str closing) true))
               (set! done true))
           (Char.= (String.char-at source @(Cursor.pos &cursor)) closing)
             (let-do [end (Cursor.advance &cursor closing)]
-              (Array.push-back! &children
-                                (Box.init
-                                  (leaf
-                                    (ReaderNodeKind.Punctuation (ReaderCategory.Close))
-                                    &cursor
-                                    &end)))
+              (append! &children
+                       (leaf builder
+                             (ReaderNodeKind.Punctuation (ReaderCategory.Close))
+                             &cursor
+                             &end))
               (set! cursor end)
               (set! done true))
-          (Array.contains? parents
-                           &(String.char-at source @(Cursor.pos &cursor)))
+          (and
+            (closing? (String.char-at source @(Cursor.pos &cursor)))
+            (Array.contains? parents
+                             &(String.char-at source @(Cursor.pos &cursor))))
             (do
-              (Array.push-back! &children
-                                (Box.init
-                                  (missing issues
-                                           &cursor
-                                           &(Char.str closing)
-                                           false)))
+              (append! &children
+                       (missing builder issues &cursor &(Char.str closing) false))
               (set! done true))
-          (let-do [step (read-node source length &cursor &ancestors issues)]
-            (Array.push-back! &children (Box.init @(ReaderStep.node &step)))
-            (set! cursor @(ReaderStep.cursor &step)))))
-      (ReaderStep.init
-        (ReaderNode.init (ReaderNodeKind.Group group)
-                         (info begin)
-                         (info &cursor)
-                         children)
+          (match (read-node builder source length &cursor parents issues)
+            (ReaderStep.Parsed node next)
+              (do (append! &children node) (set! cursor next)))))
+      (ignore (Array.pop-back! parents))
+      (ReaderStep.Parsed
+        (~builder (ReaderShape.Group group children) (info begin) (info &cursor))
         cursor)))
 
   (private read-prefix)
   (hidden read-prefix)
-  (defn read-prefix [source length begin parents issues name count]
+  (defn read-prefix [builder source length begin parents issues name count]
     (let-do [cursor (Cursor.advance-string begin
                                            source
                                            @(Cursor.pos begin)
                                            count)
-             children [(Box.init
-                         (leaf
-                           (ReaderNodeKind.Punctuation (ReaderCategory.Prefix))
-                           begin
-                           &cursor))]]
+             prefix-end (info &cursor)
+             operand (Maybe.Nothing)]
       (if (or (Int.>= @(Cursor.pos &cursor) length)
               (let [c (String.char-at source @(Cursor.pos &cursor))]
                 (or (ws-byte? c) (closing? c))))
-        (Array.push-back! &children
-                          (Box.init
-                            (missing issues
-                                     &cursor
-                                     "a form"
-                                     (Int.>= @(Cursor.pos &cursor) length))))
-        (let-do [step (read-node source length &cursor parents issues)]
-          (Array.push-back! &children (Box.init @(ReaderStep.node &step)))
-          (set! cursor @(ReaderStep.cursor &step))))
-      (ReaderStep.init
-        (ReaderNode.init
-          (ReaderNodeKind.ReaderMacro (String.copy name))
+        (set! operand
+              (missing builder
+                       issues
+                       &cursor
+                       "a form"
+                       (Int.>= @(Cursor.pos &cursor) length)))
+        (match (read-node builder source length &cursor parents issues)
+          (ReaderStep.Parsed node next)
+            (do (set! operand node) (set! cursor next))))
+      (ReaderStep.Parsed
+        (~builder
+          (ReaderShape.Prefix name prefix-end operand)
           (info begin)
-          (info &cursor)
-          children)
+          (info &cursor))
         cursor)))
 
   (private recover-atom)
   (hidden recover-atom)
-  (defn recover-atom [source length begin issues category consumed error]
+  (defn recover-atom [builder source length begin issues category consumed error]
     (let-do [start @(Cursor.pos begin)
              literal (and consumed
                           (match-ref category
@@ -1229,14 +1285,13 @@ do not discard syntax. Conversion to compiler forms requires no issues.")
                 begin
                 &cursor
                 error)
-        (ReaderStep.init
-          (leaf (ReaderNodeKind.Invalid @category) begin &cursor)
+        (ReaderStep.Parsed
+          (leaf builder (ReaderNodeKind.Invalid @category) begin &cursor)
           cursor))))
 
-  (defn read-node [source length begin parents issues]
+  (defn read-node [builder source length begin parents issues]
     (let [position @(Cursor.pos begin)
-          first (String.char-at source position)
-          macro (prefix source length position)]
+          first (String.char-at source position)]
       (cond
         (ws-byte? first)
           (let-do [end position]
@@ -1247,19 +1302,11 @@ do not discard syntax. Conversion to compiler forms requires no issues.")
                                                 source
                                                 position
                                                 (Int.- end position))]
-              (ReaderStep.init
-                (leaf (ReaderNodeKind.Whitespace) begin &cursor)
+              (ReaderStep.Parsed
+                (leaf builder (ReaderNodeKind.Whitespace) begin &cursor)
                 cursor)))
         (opening? source length position)
-          (read-group source length begin parents issues)
-        (Int.> @(Pair.b &macro) 0)
-          (read-prefix source
-                       length
-                       begin
-                       parents
-                       issues
-                       (Pair.a &macro)
-                       @(Pair.b &macro))
+          (read-group builder source length begin parents issues)
         (closing? first)
           (let-do [end (Cursor.advance begin first)]
             (issue! issues
@@ -1267,39 +1314,68 @@ do not discard syntax. Conversion to compiler forms requires no issues.")
                     begin
                     &end
                     (ParseErr.expected-at begin @"a form"))
-            (ReaderStep.init
-              (leaf (ReaderNodeKind.Invalid (ReaderCategory.Close)) begin &end)
+            (ReaderStep.Parsed
+              (leaf builder
+                    (ReaderNodeKind.Invalid (ReaderCategory.Close))
+                    begin
+                    &end)
               end))
-        (match (atom source length begin)
-          (ReaderAtom.Parsed category reply)
-            (match reply
-              (Reply.OkConsumed value cursor)
-                (ReaderStep.init
-                  (leaf (ReaderNodeKind.Atom value) begin &cursor)
-                  cursor)
-              (Reply.OkEmpty value cursor)
-                (ReaderStep.init
-                  (leaf (ReaderNodeKind.Atom value) begin &cursor)
-                  cursor)
-              (Reply.ErrConsumed error)
-                (recover-atom source length begin issues &category true error)
-              (Reply.ErrEmpty error)
-                (recover-atom source length begin issues &category false error))))))
+        (match (prefix source length position)
+          (ReaderPrefix.Present name count)
+            (read-prefix builder source length begin parents issues name count)
+          (ReaderPrefix.Absent)
+            (match (atom source length begin)
+              (ReaderAtom.Parsed category reply)
+                (match reply
+                  (Reply.OkConsumed value cursor)
+                    (ReaderStep.Parsed
+                      (leaf builder (ReaderNodeKind.Atom value) begin &cursor)
+                      cursor)
+                  (Reply.OkEmpty value cursor)
+                    (ReaderStep.Parsed
+                      (leaf builder (ReaderNodeKind.Atom value) begin &cursor)
+                      cursor)
+                  (Reply.ErrConsumed error)
+                    (recover-atom builder
+                                  source
+                                  length
+                                  begin
+                                  issues
+                                  &category
+                                  true
+                                  error)
+                  (Reply.ErrEmpty error)
+                    (recover-atom builder
+                                  source
+                                  length
+                                  begin
+                                  issues
+                                  &category
+                                  false
+                                  error)))))))
 
-  (doc read-syntax "reads complete, incomplete, or invalid source without
-discarding source syntax or executing reader macros. Strict parse uses this
-same tree and rejects it if any issue remains.")
-  (defn read-syntax [source]
+  (private read-source)
+  (hidden read-source)
+  (defn read-source [builder source]
     (let-do [length (String.length source)
              cursor (Cursor.init 0 1 1)
-             nodes (the (Array (Box ReaderNode)) [])
+             nodes []
              issues (the (Array ReaderIssue) [])
              parents (the (Array Char) [])]
       (while-do (Int.< @(Cursor.pos &cursor) length)
-        (let-do [step (read-node source length &cursor &parents &issues)]
-          (Array.push-back! &nodes (Box.init @(ReaderStep.node &step)))
-          (set! cursor @(ReaderStep.cursor &step))))
-      (ReaderDocument.init (String.copy source) nodes issues)))
+        (match (read-node builder source length &cursor &parents &issues)
+          (ReaderStep.Parsed node next)
+            (do (append! &nodes node) (set! cursor next))))
+      (ReaderOutput.Read nodes issues)))
+
+  (doc read-syntax "reads complete, incomplete, or invalid source without
+ discarding source syntax or executing reader macros. Uses the same grammar
+ and recovery as strict parsing, retaining every written token.")
+  (defn read-syntax [source]
+    (let [builder build-syntax]
+      (match (read-source &builder source)
+        (ReaderOutput.Read nodes issues)
+          (ReaderDocument.init (String.copy source) nodes issues))))
 
   (private lower-node)
   (hidden lower-node)
@@ -1321,22 +1397,12 @@ same tree and rejects it if any issue remains.")
           value (match-ref kind
             (ReaderNodeKind.Atom form) (Maybe.Just (Form.copy form))
             (ReaderNodeKind.Group group)
-              (let [forms (lower-nodes children)]
-                (Maybe.Just
-                  (match-ref group
-                    (ReaderGroup.List) (Form.Lst forms)
-                    (ReaderGroup.Array) (Form.Arr forms)
-                    (ReaderGroup.StaticArray) (Form.StaticArr forms)
-                    (ReaderGroup.Dictionary) (Form.Dict forms))))
+              (Maybe.Just (group-form @group (lower-nodes children)))
             (ReaderNodeKind.ReaderMacro name)
-              (let [forms (lower-nodes children)]
-                (Maybe.Just
-                  (Form.Lst
-                    [(Box.init
-                       (Located.init (Form.Sym [(String.copy name)])
-                                     (Info.synthetic)
-                                     (Info.synthetic)))
-                     @(Array.unsafe-nth &forms 0)])))
+              (match (lower-node (Box.peek (Array.unsafe-nth children 1)))
+                (Maybe.Just operand)
+                  (Maybe.Just (prefix-form (String.copy name) operand))
+                (Maybe.Nothing) (Maybe.Nothing))
             _ (the (Maybe Form) (Maybe.Nothing)))]
       (match value
         (Maybe.Just form)
@@ -1344,11 +1410,18 @@ same tree and rejects it if any issue remains.")
             (Located.init form @(ReaderNode.start node) @(ReaderNode.end node)))
         (Maybe.Nothing) (Maybe.Nothing))))
 
-  (doc parse "strictly reads source using the lossless reader, returning located
-compiler forms only when the complete source is valid. Comments are retained.")
-  (register forms
-    (Fn [(Ref ReaderDocument)] (Result (Array (Box Located)) ParseErr)))
-  (defn parse [source] (forms &(read-syntax source)))
+  (doc parse "strictly reads source into located compiler forms. Shares the
+ grammar and recovery used for lossless documents, and rejects any issue.
+ Comments are retained.")
+
+  (defn parse [source]
+    (let [builder build-form]
+      (match (read-source &builder source)
+        (ReaderOutput.Read nodes issues)
+          (if (Array.empty? &issues)
+            (Result.Success nodes)
+            (Result.Error
+              (ParseErr.copy (ReaderIssue.error (Array.unsafe-nth &issues 0))))))))
 
   (doc parse-form
     "strictly reads exactly one form, including surrounding whitespace.")

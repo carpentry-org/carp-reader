@@ -1,0 +1,82 @@
+; Copy-count instrumentation for the reference Carp compiler. Metacarp
+; emits intrinsic recursive copies, which do not call these observer hooks.
+(load "../carp-reader.carp")
+(load "Test.carp")
+(Project.no-echo)
+(use-all Test)
+
+(def *node-copies* 0)
+(def *located-copies* 0)
+
+; These observers preserve the ordinary copiers. Explicit document copies
+; below verify that the counters see recursive copies when they occur.
+(defmodule ReaderNode
+  (defn copy [node]
+    (do
+      (set! *node-copies* (Int.inc *node-copies*))
+      (ReaderNode.init @(ReaderNode.kind node)
+                       @(ReaderNode.start node)
+                       @(ReaderNode.end node)
+                       @(ReaderNode.children node)))))
+
+(defmodule Located
+  (defn copy [located]
+    (do
+      (set! *located-copies* (Int.inc *located-copies*))
+      (Located.init @(Located.form located)
+                    @(Located.info located)
+                    @(Located.end located)))))
+
+(defn construction-copies [source]
+  (do
+    (set! *node-copies* 0)
+    (let [document (Reader.read-syntax source)]
+      (ignore (Array.length (ReaderDocument.nodes &document))))
+    *node-copies*))
+
+(defn lowering-copies [source]
+  (let-do [document (Reader.read-syntax source)]
+    (set! *located-copies* 0)
+    (ignore (Reader.forms &document))
+    *located-copies*))
+
+(defn copy-document []
+  (let [document (Reader.read-syntax "'([x])")] (ReaderDocument.copy &document)))
+
+(defn explicit-copies? []
+  (do
+    (set! *node-copies* 0)
+    (set! *located-copies* 0)
+    (let [document (copy-document)]
+      (ignore (Array.length (ReaderDocument.nodes &document))))
+    (Int.> *node-copies* 0)))
+
+(defn explicit-form-copies? []
+  (let-do [forms (Reader.parse "'([x])")]
+    (set! *located-copies* 0)
+    (match forms
+      (Result.Error _) ()
+      (Result.Success values)
+        (let [copied @(Array.unsafe-nth &values 0)]
+          (ignore (Located.form (Box.peek &copied)))))
+    (Int.> *located-copies* 0)))
+
+(deftest test
+  (assert-equal test
+    0
+    (construction-copies "'(([x]))")
+    "tree construction moves nested groups and reader-macro operands")
+  (assert-equal test
+    0
+    (construction-copies "([)] later")
+    "recovery also moves completed subtrees")
+  (assert-equal test
+    0
+    (lowering-copies "'`%~@&([x])")
+    "lowering moves temporary reader-macro operand boxes")
+  (assert-true test
+    (explicit-copies?)
+    "explicit document copying reaches the node observer")
+  (assert-true test
+    (explicit-form-copies?)
+    "explicit form copying reaches the located observer"))

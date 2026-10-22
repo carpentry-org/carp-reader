@@ -1,0 +1,38 @@
+(load "../carp-reader.carp")
+
+(load "Test.carp")
+
+(Project.no-echo)
+
+(use-all Test)
+
+(defn copy-document []
+  (let [document (Reader.read-syntax "'([x])")] (ReaderDocument.copy &document)))
+
+(defn rendered [document]
+  (match (Reader.forms document)
+    (Result.Error error) (Parser.format-error &error)
+    (Result.Success forms)
+      (let-do [pieces (the (Array String) [])]
+        (for [i 0 (Array.length &forms)]
+          (Array.push-back! &pieces
+                            (Form.str
+                              (Located.form (Box.peek (Array.unsafe-nth &forms i))))))
+        (String.join " " &pieces))))
+
+(defn render-copy [] (let [document (copy-document)] (rendered &document)))
+
+(defn repeated-lowering? []
+  (let [document (copy-document)
+        first (rendered &document)
+        second (rendered &document)]
+    (and (String.= &first "(quote ([x]))") (String.= &first &second))))
+
+(deftest test
+  (assert-equal test
+    "(quote ([x]))"
+    &(render-copy)
+    "a copied document remains valid after the original is destroyed")
+  (assert-true test
+    (repeated-lowering?)
+    "borrowed lowering preserves the document for another call"))
