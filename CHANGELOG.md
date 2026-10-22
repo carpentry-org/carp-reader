@@ -5,6 +5,14 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- `Reader.read-syntax` returns a lossless `ReaderDocument`, retaining trivia,
+  delimiter punctuation, reader prefixes, source ranges, and recovery issues.
+  `ReaderDocument.status` distinguishes complete, incomplete, and invalid input;
+  `Reader.node-category` supplies reader-owned lexical categories.
+- `Reader.forms` lowers issue-free documents to located forms. `Reader.parse`
+  and `Reader.parse-form` use the same reader and reject recovered syntax.
+- CI runs both the strict parsing suite and the lossless editing suite.
+
 - `Form.str` renders Float literals without an exponent or lost digits, and
   characters above U+FFFF raw instead of as `\U` escapes, so both read back
   in the Carp compiler.

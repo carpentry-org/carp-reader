@@ -1,0 +1,123 @@
+(load "../carp-reader.carp")
+(load "Test.carp")
+(Project.no-echo)
+(use-all Test)
+
+(defn leaf-ranges! [node ranges]
+  (let [children (ReaderNode.children node)]
+    (if (Array.empty? children)
+      (Array.push-back! ranges
+                        (Pair.init @(Info.pos (ReaderNode.start node))
+                                   @(Info.pos (ReaderNode.end node))))
+      (for [i 0 (Array.length children)]
+        (leaf-ranges! (Box.peek (Array.unsafe-nth children i)) ranges)))))
+
+(defn lossless? [source]
+  (let-do [document (Reader.read-syntax source)
+           nodes (ReaderDocument.nodes &document)
+           ranges (the (Array (Pair Int Int)) [])
+           cursor 0
+           valid true
+           pieces (the (Array String) [])]
+    (for [i 0 (Array.length nodes)]
+      (leaf-ranges! (Box.peek (Array.unsafe-nth nodes i)) &ranges))
+    (for [i 0 (Array.length &ranges)]
+      (let-do [range (Array.unsafe-nth &ranges i)
+               start @(Pair.a range)
+               end @(Pair.b range)]
+        (unless (and (Int.= start cursor) (Int.>= end start)) (set! valid false))
+        (Array.push-back! &pieces (String.byte-slice source start end))
+        (set! cursor end)))
+    (and valid
+         (and (Int.= cursor (String.length source))
+              (String.= source &(String.concat &pieces))))))
+
+(defn complete? [source]
+  (match (ReaderDocument.status &(Reader.read-syntax source))
+    (ReaderStatus.Complete) true
+    _ false))
+
+(defn incomplete? [source]
+  (match (ReaderDocument.status &(Reader.read-syntax source))
+    (ReaderStatus.Incomplete) true
+    _ false))
+
+(defn invalid? [source]
+  (match (ReaderDocument.status &(Reader.read-syntax source))
+    (ReaderStatus.Invalid) true
+    _ false))
+
+(defn last-symbol [source]
+  (let [document (Reader.read-syntax source)
+        nodes (ReaderDocument.nodes &document)]
+    (match-ref (ReaderNode.kind
+        (Box.peek (Array.unsafe-nth nodes (Int.dec (Array.length nodes)))))
+      (ReaderNodeKind.Atom (Form.Sym names)) (String.join "." names)
+      _ @"")))
+
+(defn preserves-prefix? []
+  (let [document (Reader.read-syntax "%@λ.value")
+        node (Box.peek (Array.unsafe-nth (ReaderDocument.nodes &document) 0))]
+    (match-ref (ReaderNode.kind node)
+      (ReaderNodeKind.ReaderMacro name)
+        (let [children (ReaderNode.children node)
+              token (Box.peek (Array.unsafe-nth children 0))
+              operand (Box.peek (Array.unsafe-nth children 1))]
+          (and (String.= name "unquote-splicing")
+               (and
+                 (Int.= @(Info.pos (ReaderNode.end token)) 2)
+                 (Int.= @(Info.pos (ReaderNode.start operand)) 2))))
+      _ false)))
+
+(defn rejects-recovery? []
+  (let [document (Reader.read-syntax "(Int.inc 1")]
+    (Result.error? &(Reader.forms &document))))
+
+(defn every-prefix-lossless? [source]
+  (let-do [characters (String.chars source)
+           okay true]
+    (for [i 0 (Int.inc (Array.length &characters))]
+      (unless (lossless? &(String.from-chars &(Array.take i &characters)))
+        (set! okay false)))
+    okay))
+
+(defn rejected-symbol? [source]
+  (let [document (Reader.read-syntax source)
+        node (Box.peek (Array.unsafe-nth (ReaderDocument.nodes &document) 0))]
+    (match (Reader.node-category node) (ReaderCategory.Symbol) true _ false)))
+
+(deftest test (assert-true test (lossless? " \t(foo, [1 ; hello
+λ]) \r\n") "valid syntax retains every source byte") (assert-true test
+    (lossless? "([)] #bad \\not-a-char λ.")
+    "recovery retains every source byte") (assert-true test
+    (every-prefix-lossless? "(defn λ [x] (do ; note
+r\"a\"\"b\" #\"[x]\" \\u1234 %@x))")
+    "every edit prefix remains lossless") (assert-true test
+    (complete? "(x [1 2])")
+    "valid input is complete") (assert-true test
+    (incomplete? "(x [1 2")
+    "open groups are incomplete") (assert-true test
+    (incomplete? "\"unfinished\\")
+    "string ending in an escape is incomplete") (assert-true test
+    (incomplete? "%@")
+    "reader prefix needs an operand") (assert-true test
+    (invalid? "(]")
+    "invalid closing delimiter takes precedence over missing closure") (assert-true test
+    (invalid? "& value")
+    "recovery does not accept whitespace forbidden by the reader") (assert-true test
+    (invalid? "\\unknown")
+    "invalid named character is not a request for another line") (assert-equal test
+    "later"
+    &(last-symbol "(bad] ) later")
+    "a closing-delimiter error preserves following forms") (assert-equal test
+    "later"
+    &(last-symbol "([)] later")
+    "an ancestor closer recovers the outer group") (assert-true test
+    (preserves-prefix?)
+    "reader-macro spelling and UTF-8 operand offsets survive") (assert-true test
+    (rejects-recovery?)
+    "incomplete syntax cannot become compiler input") (assert-true test
+    (rejected-symbol? "0x.")
+    "failed symbol parsing does not become a number based on its first character") (assert-true test
+    (rejected-symbol? "λ.Int.")
+    "an incomplete qualified symbol retains its reader category"))

@@ -22,6 +22,35 @@ in which Carp gets parsed into a structured `Form` AST. Built on
 
 `Reader.parse` returns `(Result (Array (Box Located)) ParseErr)`.
 
+## Editing documents
+
+`Reader.read-syntax` returns a `ReaderDocument` for one exact UTF-8 buffer,
+including incomplete or invalid input:
+
+```clojure
+(let [document (Reader.read-syntax "(let [x 1] x")]
+  (match (ReaderDocument.status &document)
+    (ReaderStatus.Complete) (IO.println "complete")
+    (ReaderStatus.Incomplete) (IO.println "needs more input")
+    (ReaderStatus.Invalid) (IO.println "invalid")))
+```
+
+The document retains source, nodes, and issues. A `ReaderNode` carries its
+start and end `Info`, a kind, and children. Groups retain delimiter punctuation;
+reader macros retain their prefix and operand. Whitespace and comments remain
+in the tree. Leaves partition every source byte, with additional zero-width
+`Missing` nodes where syntax is absent. `Reader.node-category` returns lexical
+categories chosen by the actual atom parsers.
+
+Each `ReaderIssue` distinguishes incomplete from invalid syntax and retains
+the ordinary `ParseErr`. Definite invalid syntax takes precedence when a
+document also has missing syntax.
+
+`Reader.forms` lowers a document only when it has no issues. It returns the
+same located forms as `Reader.parse`, including reader-macro lowering.
+`Reader.parse` now reads this tree and calls `Reader.forms`; strict parsing and
+editing share one grammar. Recovery never makes invented syntax executable.
+
 ## Located
 
 Every node the parser emits — top-level and nested alike — is a `Located`,

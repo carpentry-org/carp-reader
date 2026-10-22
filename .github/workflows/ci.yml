@@ -22,7 +22,9 @@ jobs:
       - name: Run tests
         run: |
           set -euo pipefail
-          carp -x test/carp-reader.carp
+          for suite in test/*.carp; do
+            carp -x "$suite"
+          done
 
       - name: Install angler
         run: |

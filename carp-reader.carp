@@ -269,6 +269,71 @@ you need it.")
   (defn str [l] (Form.str (Located.form l)))
   (implements str Located.str))
 
+(doc ReaderCategory
+  "is a reader-owned source category, independent of any display style.")
+(deftype ReaderCategory
+  (Whitespace [])
+  (Symbol [])
+  (Number [])
+  (Boolean [])
+  (String [])
+  (Pattern [])
+  (Character [])
+  (Comment [])
+  (Open [])
+  (Close [])
+  (Prefix [])
+  (Unknown []))
+
+(deftype ReaderGroup
+  (List [])
+  (Array [])
+  (StaticArray [])
+  (Dictionary []))
+
+(doc ReaderNodeKind "preserves written syntax before reader-macro lowering.
+Only Atom carries a compiler form. Missing nodes have zero width; Invalid
+nodes retain the exact bytes rejected by the reader.")
+(deftype ReaderNodeKind
+  (Atom [Form])
+  (Whitespace [])
+  (Group [ReaderGroup])
+  (ReaderMacro [String])
+  (Punctuation [ReaderCategory])
+  (Invalid [ReaderCategory])
+  (Missing [String]))
+
+(deftype ReaderNode
+  [kind ReaderNodeKind
+   start Info
+   end Info
+   children (Array (Box ReaderNode))])
+
+(deftype ReaderIssueKind
+  (Incomplete [])
+  (Invalid []))
+(deftype ReaderStatus
+  (Complete [])
+  (Incomplete [])
+  (Invalid []))
+(deftype ReaderIssue [kind ReaderIssueKind
+                      start Info
+                      end Info
+                      error ParseErr])
+
+(doc ReaderDocument "is a lossless read of one exact UTF-8 source buffer.
+Its leaves partition the source, apart from zero-width missing nodes. Issues
+do not discard syntax. Conversion to compiler forms requires no issues.")
+(deftype ReaderDocument
+  [source String
+   nodes (Array (Box ReaderNode))
+   issues (Array ReaderIssue)])
+
+(deftype ReaderAtom (Parsed [ReaderCategory (Reply Form)]))
+
+(deftype ReaderStep [node ReaderNode
+                     cursor Cursor])
+
 (defmodule Reader
   (private ws-byte?)
   (hidden ws-byte?)
@@ -900,252 +965,449 @@ you need it.")
     (Parser.map
       (Parser.then (Parser.byte \;)
                    (Parser.take-while (fn [c] (not (Char.= c \newline)))))
-      (fn [s] (Form.Cmt s))))
+      (fn [s] (Form.Cmt s)))))
 
-  (private *form*)
-  (def *form* (the (Parser Located) (Parser.placeholder)))
+(defmodule Reader
+  (private info)
+  (hidden info)
+  (defn info [cursor]
+    (Info.init @(Cursor.pos cursor) @(Cursor.line cursor) @(Cursor.col cursor)))
 
-  (private *list-cell*)
-  (def *list-cell* (the (Parser Form) (Parser.placeholder)))
+  (private leaf)
+  (hidden leaf)
+  (defn leaf [kind begin end] (ReaderNode.init kind (info begin) (info end) []))
 
-  (private *array-cell*)
-  (def *array-cell* (the (Parser Form) (Parser.placeholder)))
+  (private category)
+  (hidden category)
+  (defn category [form]
+    (match-ref form
+      (Form.Sym _) (ReaderCategory.Symbol)
+      (Form.Bol _) (ReaderCategory.Boolean)
+      (Form.Str _) (ReaderCategory.String)
+      (Form.Pat _) (ReaderCategory.Pattern)
+      (Form.Chr _) (ReaderCategory.Character)
+      (Form.Cmt _) (ReaderCategory.Comment)
+      _ (ReaderCategory.Number)))
 
-  (private *dict-cell*)
-  (def *dict-cell* (the (Parser Form) (Parser.placeholder)))
-
-  (private *static-array-cell*)
-  (def *static-array-cell* (the (Parser Form) (Parser.placeholder)))
+  (private issue!)
+  (hidden issue!)
+  (defn issue! [issues kind begin end error]
+    (Array.push-back! issues
+                      (ReaderIssue.init kind (info begin) (info end) error)))
 
   (private *string-cell*)
-  (def *string-cell* (the (Parser Form) (Parser.placeholder)))
-
+  (def *string-cell* (string-))
   (private *raw-string-cell*)
-  (def *raw-string-cell* (the (Parser Form) (Parser.placeholder)))
-
+  (def *raw-string-cell* (raw-string))
   (private *pattern-cell*)
-  (def *pattern-cell* (the (Parser Form) (Parser.placeholder)))
-
+  (def *pattern-cell* (pattern-))
   (private *char-cell*)
-  (def *char-cell* (the (Parser Form) (Parser.placeholder)))
-
+  (def *char-cell* (char-))
   (private *number-cell*)
-  (def *number-cell* (the (Parser Form) (Parser.placeholder)))
-
+  (def *number-cell* (number))
   (private *symbol-cell*)
-  (def *symbol-cell* (the (Parser Form) (Parser.placeholder)))
-
+  (def *symbol-cell* (symbol-))
   (private *comment-cell*)
-  (def *comment-cell* (the (Parser Form) (Parser.placeholder)))
+  (def *comment-cell* (comment-))
 
-  (private *ref-cell*)
-  (def *ref-cell* (the (Parser Form) (Parser.placeholder)))
+  (private atom)
+  (hidden atom)
+  (defn atom [source length cursor]
+    (let [position @(Cursor.pos cursor)
+          c (String.char-at source position)]
+      (cond
+        (Char.= c \;)
+          (ReaderAtom.Parsed (ReaderCategory.Comment)
+                             (~(Parser.run &*comment-cell*) source length cursor))
+        (Char.= c \")
+          (ReaderAtom.Parsed (ReaderCategory.String)
+                             (~(Parser.run &*string-cell*) source length cursor))
+        (Char.= c \#)
+          (ReaderAtom.Parsed (ReaderCategory.Pattern)
+                             (~(Parser.run &*pattern-cell*) source length cursor))
+        (Char.= c \\)
+          (ReaderAtom.Parsed (ReaderCategory.Character)
+                             (~(Parser.run &*char-cell*) source length cursor))
+        (and (Char.= c \r)
+             (and (Int.< (Int.inc position) length)
+                  (Char.= (String.char-at source (Int.inc position)) \")))
+          (ReaderAtom.Parsed (ReaderCategory.String)
+                             (~(Parser.run &*raw-string-cell*) source
+                                                               length
+                                                               cursor))
+        (or (digit? c) (Char.= c \-))
+          (match (~(Parser.run &*number-cell*) source length cursor)
+            (Reply.ErrEmpty _)
+              (ReaderAtom.Parsed (ReaderCategory.Symbol)
+                                 (~(Parser.run &*symbol-cell*) source
+                                                               length
+                                                               cursor))
+            reply (ReaderAtom.Parsed (ReaderCategory.Number) reply))
+        (ReaderAtom.Parsed (ReaderCategory.Symbol)
+                           (~(Parser.run &*symbol-cell*) source length cursor)))))
 
-  (private *deref-cell*)
-  (def *deref-cell* (the (Parser Form) (Parser.placeholder)))
+  (private prefix)
+  (hidden prefix)
+  (defn prefix [source length position]
+    (let [c (String.char-at source position)]
+      (cond
+        (Char.= c \&) (Pair.init @"ref" 1)
+        (Char.= c \~) (Pair.init @"deref" 1)
+        (Char.= c \@) (Pair.init @"copy" 1)
+        (Char.= c \') (Pair.init @"quote" 1)
+        (Char.= c \`) (Pair.init @"quasiquote" 1)
+        (Char.= c \%)
+          (if (and (Int.< (Int.inc position) length)
+                   (Char.= (String.char-at source (Int.inc position)) \@))
+            (Pair.init @"unquote-splicing" 2)
+            (Pair.init @"unquote" 1))
+        (Pair.init @"" 0))))
 
-  (private *copy-cell*)
-  (def *copy-cell* (the (Parser Form) (Parser.placeholder)))
+  (private closing?)
+  (hidden closing?)
+  (defn closing? [c] (or (Char.= c \)) (or (Char.= c \]) (Char.= c \}))))
 
-  (private *quote-cell*)
-  (def *quote-cell* (the (Parser Form) (Parser.placeholder)))
+  (private opening?)
+  (hidden opening?)
+  (defn opening? [source length position]
+    (let [c (String.char-at source position)]
+      (or (Char.= c \()
+          (or (Char.= c \[)
+              (or (Char.= c \{)
+                  (and (Char.= c \$)
+                       (and (Int.< (Int.inc position) length)
+                            (Char.=
+                              (String.char-at source (Int.inc position))
+                              \[))))))))
 
-  (private *quasiquote-cell*)
-  (def *quasiquote-cell* (the (Parser Form) (Parser.placeholder)))
+  (private read-node)
+  (hidden read-node)
+  (register read-node
+    (Fn
+      [(Ref String)
+       Int
+       (Ref Cursor)
+       (Ref (Array Char))
+       (Ref (Array ReaderIssue))]
+      ReaderStep))
 
-  (private *unquote-cell*)
-  (def *unquote-cell* (the (Parser Form) (Parser.placeholder)))
-
-  (private *unquote-splice-cell*)
-  (def *unquote-splice-cell* (the (Parser Form) (Parser.placeholder)))
-
-  (private many-forms)
-  (hidden many-forms)
-  (defn many-forms []
-    (Parser.then (skip-ws)
-                 (Parser.many
-                   (Parser.map
-                     (Parser.before (Parser.recurse &*form*) (skip-ws))
-                     (fn [c] (Box.init c))))))
-
-  (private list-)
-  (hidden list-)
-  (defn list- []
-    (Parser.map
-      (Parser.between (Parser.byte \() (Parser.byte \)) (many-forms))
-      (fn [items] (Form.Lst items))))
-
-  (private array-)
-  (hidden array-)
-  (defn array- []
-    (Parser.map
-      (Parser.between (Parser.byte \[) (Parser.byte \]) (many-forms))
-      (fn [items] (Form.Arr items))))
-
-  (private static-array)
-  (hidden static-array)
-  (defn static-array []
-    (Parser.map
-      (Parser.between (Parser.string @"$[") (Parser.byte \]) (many-forms))
-      (fn [items] (Form.StaticArr items))))
-
-  (private dict)
-  (hidden dict)
-  (defn dict []
-    (Parser.map
-      (Parser.between (Parser.byte \{) (Parser.byte \}) (many-forms))
-      (fn [items] (Form.Dict items))))
-
-  (private macro-list)
-  (hidden macro-list)
-  (defn macro-list [name body]
-    (Form.Lst
-      [(Box.init
-         (Located.init (Form.Sym [@name]) (Info.synthetic) (Info.synthetic)))
-       (Box.init body)]))
-
-  (private reader-macro)
-  (hidden reader-macro)
-  (defn reader-macro [open name]
-    (Parser.map
-      (Parser.then (Parser.string open) (Parser.recurse &*form*))
-      (fn [body] (macro-list &name body))))
-
-  (private ref-)
-  (hidden ref-)
-  (defn ref- [] (reader-macro @"&" @"ref"))
-
-  (private deref-)
-  (hidden deref-)
-  (defn deref- [] (reader-macro @"~" @"deref"))
-
-  (private copy-)
-  (hidden copy-)
-  (defn copy- [] (reader-macro @"@" @"copy"))
-
-  (private quote-)
-  (hidden quote-)
-  (defn quote- [] (reader-macro @"'" @"quote"))
-
-  (private quasiquote-)
-  (hidden quasiquote-)
-  (defn quasiquote- [] (reader-macro @"`" @"quasiquote"))
-
-  (private unquote-)
-  (hidden unquote-)
-  (defn unquote- [] (reader-macro @"%" @"unquote"))
-
-  (private unquote-splice-)
-  (hidden unquote-splice-)
-  (defn unquote-splice- [] (reader-macro @"%@" @"unquote-splicing"))
-
-  (private form)
-  (hidden form)
-  (private wrap)
-  (hidden wrap)
-  (defn wrap [info reply]
-    (match reply
-      (Reply.OkConsumed v c)
-        (let-do [end (Info.init @(Cursor.pos &c)
-                                @(Cursor.line &c)
-                                @(Cursor.col &c))]
-          (Reply.OkConsumed (Located.init v info end) c))
-      (Reply.OkEmpty v c)
-        (let-do [end (Info.init @(Cursor.pos &c)
-                                @(Cursor.line &c)
-                                @(Cursor.col &c))]
-          (Reply.OkEmpty (Located.init v info end) c))
-      (Reply.ErrConsumed e) (Reply.ErrConsumed e)
-      (Reply.ErrEmpty e) (Reply.ErrEmpty e)))
-
-  (defn form []
-    (Parser.init
-      (fn [src len cur]
-        (let [pos @(Cursor.pos cur)]
-          (if (Int.>= pos len)
-            (Reply.ErrEmpty (ParseErr.expected-at cur @"a form"))
-            (let [b (String.char-at src pos)
-                  info (Info.init pos @(Cursor.line cur) @(Cursor.col cur))]
-              (cond
-                (Char.= b \()
-                  (wrap info (~(Parser.run &*list-cell*) src len cur))
-                (Char.= b \[)
-                  (wrap info (~(Parser.run &*array-cell*) src len cur))
-                (Char.= b \{)
-                  (wrap info (~(Parser.run &*dict-cell*) src len cur))
-                (Char.= b \$)
-                  (wrap info (~(Parser.run &*static-array-cell*) src len cur))
-                (Char.= b \&)
-                  (wrap info (~(Parser.run &*ref-cell*) src len cur))
-                (Char.= b \~)
-                  (wrap info (~(Parser.run &*deref-cell*) src len cur))
-                (Char.= b \@)
-                  (wrap info (~(Parser.run &*copy-cell*) src len cur))
-                (Char.= b \')
-                  (wrap info (~(Parser.run &*quote-cell*) src len cur))
-                (Char.= b \`)
-                  (wrap info (~(Parser.run &*quasiquote-cell*) src len cur))
-                (Char.= b \;)
-                  (wrap info (~(Parser.run &*comment-cell*) src len cur))
-                (Char.= b \%)
-                  (if (and (Int.< (Int.inc pos) len)
-                           (Char.= (String.char-at src (Int.inc pos)) \@))
-                    (wrap info
-                          (~(Parser.run &*unquote-splice-cell*) src len cur))
-                    (wrap info (~(Parser.run &*unquote-cell*) src len cur)))
-                (Char.= b \")
-                  (wrap info (~(Parser.run &*string-cell*) src len cur))
-                (Char.= b \#)
-                  (wrap info (~(Parser.run &*pattern-cell*) src len cur))
-                (Char.= b \\)
-                  (wrap info (~(Parser.run &*char-cell*) src len cur))
-                (Char.= b \r)
-                  (if (and (Int.< (Int.inc pos) len)
-                           (Char.= (String.char-at src (Int.inc pos)) \"))
-                    (wrap info (~(Parser.run &*raw-string-cell*) src len cur))
-                    (wrap info (~(Parser.run &*symbol-cell*) src len cur)))
-                (or (digit? b) (Char.= b \-))
-                  (let [reply (~(Parser.run &*number-cell*) src len cur)]
-                    (match reply
-                      (Reply.OkConsumed v c) (wrap info (Reply.OkConsumed v c))
-                      (Reply.OkEmpty v c) (wrap info (Reply.OkEmpty v c))
-                      (Reply.ErrConsumed e) (wrap info (Reply.ErrConsumed e))
-                      (Reply.ErrEmpty _)
-                        (wrap info (~(Parser.run &*symbol-cell*) src len cur))))
-                (wrap info (~(Parser.run &*symbol-cell*) src len cur)))))))))
-
-  (def -init
+  (private missing)
+  (hidden missing)
+  (defn missing [issues cursor expected incomplete]
     (do
-      (set! *list-cell* (list-))
-      (set! *array-cell* (array-))
-      (set! *dict-cell* (dict))
-      (set! *static-array-cell* (static-array))
-      (set! *string-cell* (string-))
-      (set! *raw-string-cell* (raw-string))
-      (set! *pattern-cell* (pattern-))
-      (set! *char-cell* (char-))
-      (set! *number-cell* (number))
-      (set! *symbol-cell* (symbol-))
-      (set! *comment-cell* (comment-))
-      (set! *ref-cell* (ref-))
-      (set! *deref-cell* (deref-))
-      (set! *copy-cell* (copy-))
-      (set! *quote-cell* (quote-))
-      (set! *quasiquote-cell* (quasiquote-))
-      (set! *unquote-cell* (unquote-))
-      (set! *unquote-splice-cell* (unquote-splice-))
-      (set! *form* (form))
-      0))
+      (issue! issues
+              (if incomplete
+                (ReaderIssueKind.Incomplete)
+                (ReaderIssueKind.Invalid))
+              cursor
+              cursor
+              (ParseErr.expected-at cursor (String.copy expected)))
+      (leaf (ReaderNodeKind.Missing (String.copy expected)) cursor cursor)))
 
-  (doc parse "parses a Carp source string into an array of top-level
-  nodes, yielding `(Result (Array (Box Located)) ParseErr)`. Use
-  `Located.form` to reach the `Form` inside a `Located`. Comments are
-  preserved as `Form.Cmt` nodes interspersed with real forms.")
-  (defn parse [src] (Parser.parse (many-forms) src))
+  (private read-group)
+  (hidden read-group)
+  (defn read-group [source length begin parents issues]
+    (let-do [first (String.char-at source @(Cursor.pos begin))
+             closing (cond (Char.= first \() \) (Char.= first \{) \} \])
+             group (cond
+               (Char.= first \() (ReaderGroup.List)
+               (Char.= first \[) (ReaderGroup.Array)
+               (Char.= first \{) (ReaderGroup.Dictionary)
+               (ReaderGroup.StaticArray))
+             count (if (Char.= first \$) 2 1)
+             cursor (Cursor.advance-string begin
+                                           source
+                                           @(Cursor.pos begin)
+                                           count)
+             children [(Box.init
+                         (leaf
+                           (ReaderNodeKind.Punctuation (ReaderCategory.Open))
+                           begin
+                           &cursor))]
+             ancestors (Array.copy parents)
+             done false]
+      (Array.push-back! &ancestors closing)
+      (while-do (not done)
+        (cond
+          (Int.>= @(Cursor.pos &cursor) length)
+            (do
+              (Array.push-back! &children
+                                (Box.init
+                                  (missing issues
+                                           &cursor
+                                           &(Char.str closing)
+                                           true)))
+              (set! done true))
+          (Char.= (String.char-at source @(Cursor.pos &cursor)) closing)
+            (let-do [end (Cursor.advance &cursor closing)]
+              (Array.push-back! &children
+                                (Box.init
+                                  (leaf
+                                    (ReaderNodeKind.Punctuation (ReaderCategory.Close))
+                                    &cursor
+                                    &end)))
+              (set! cursor end)
+              (set! done true))
+          (Array.contains? parents
+                           &(String.char-at source @(Cursor.pos &cursor)))
+            (do
+              (Array.push-back! &children
+                                (Box.init
+                                  (missing issues
+                                           &cursor
+                                           &(Char.str closing)
+                                           false)))
+              (set! done true))
+          (let-do [step (read-node source length &cursor &ancestors issues)]
+            (Array.push-back! &children (Box.init @(ReaderStep.node &step)))
+            (set! cursor @(ReaderStep.cursor &step)))))
+      (ReaderStep.init
+        (ReaderNode.init (ReaderNodeKind.Group group)
+                         (info begin)
+                         (info &cursor)
+                         children)
+        cursor)))
 
-  (doc parse-form "parses exactly one top-level form, yielding
-  `(Result Located ParseErr)`. Use `parse` for whole-file inputs.")
-  (defn parse-form [src]
-    (Parser.parse
-      (Parser.then (skip-ws) (Parser.before (Parser.recurse &*form*) (skip-ws)))
-      src)))
+  (private read-prefix)
+  (hidden read-prefix)
+  (defn read-prefix [source length begin parents issues name count]
+    (let-do [cursor (Cursor.advance-string begin
+                                           source
+                                           @(Cursor.pos begin)
+                                           count)
+             children [(Box.init
+                         (leaf
+                           (ReaderNodeKind.Punctuation (ReaderCategory.Prefix))
+                           begin
+                           &cursor))]]
+      (if (or (Int.>= @(Cursor.pos &cursor) length)
+              (let [c (String.char-at source @(Cursor.pos &cursor))]
+                (or (ws-byte? c) (closing? c))))
+        (Array.push-back! &children
+                          (Box.init
+                            (missing issues
+                                     &cursor
+                                     "a form"
+                                     (Int.>= @(Cursor.pos &cursor) length))))
+        (let-do [step (read-node source length &cursor parents issues)]
+          (Array.push-back! &children (Box.init @(ReaderStep.node &step)))
+          (set! cursor @(ReaderStep.cursor &step))))
+      (ReaderStep.init
+        (ReaderNode.init
+          (ReaderNodeKind.ReaderMacro (String.copy name))
+          (info begin)
+          (info &cursor)
+          children)
+        cursor)))
+
+  (private recover-atom)
+  (hidden recover-atom)
+  (defn recover-atom [source length begin issues category consumed error]
+    (let-do [start @(Cursor.pos begin)
+             literal (and consumed
+                          (match-ref category
+                            (ReaderCategory.String) true
+                            (ReaderCategory.Pattern) true
+                            _ false))
+             character (match-ref category
+               (ReaderCategory.Character) true
+               _ false)
+             end (if literal length (Int.inc start))]
+      (unless literal
+        (while-do (and (Int.< end length)
+                       (let [c (String.char-at source end)]
+                         (or (sym-byte? c) (Char.= c \.))))
+          (set! end (Int.inc end))))
+      (let-do [cursor (Cursor.advance-string begin
+                                             source
+                                             start
+                                             (Int.- end start))]
+        (issue! issues
+                (if (or literal (and character (Int.= (Int.inc start) length)))
+                  (ReaderIssueKind.Incomplete)
+                  (ReaderIssueKind.Invalid))
+                begin
+                &cursor
+                error)
+        (ReaderStep.init
+          (leaf (ReaderNodeKind.Invalid @category) begin &cursor)
+          cursor))))
+
+  (defn read-node [source length begin parents issues]
+    (let [position @(Cursor.pos begin)
+          first (String.char-at source position)
+          macro (prefix source length position)]
+      (cond
+        (ws-byte? first)
+          (let-do [end position]
+            (while-do (and (Int.< end length)
+                           (ws-byte? (String.char-at source end)))
+              (set! end (Int.inc end)))
+            (let [cursor (Cursor.advance-string begin
+                                                source
+                                                position
+                                                (Int.- end position))]
+              (ReaderStep.init
+                (leaf (ReaderNodeKind.Whitespace) begin &cursor)
+                cursor)))
+        (opening? source length position)
+          (read-group source length begin parents issues)
+        (Int.> @(Pair.b &macro) 0)
+          (read-prefix source
+                       length
+                       begin
+                       parents
+                       issues
+                       (Pair.a &macro)
+                       @(Pair.b &macro))
+        (closing? first)
+          (let-do [end (Cursor.advance begin first)]
+            (issue! issues
+                    (ReaderIssueKind.Invalid)
+                    begin
+                    &end
+                    (ParseErr.expected-at begin @"a form"))
+            (ReaderStep.init
+              (leaf (ReaderNodeKind.Invalid (ReaderCategory.Close)) begin &end)
+              end))
+        (match (atom source length begin)
+          (ReaderAtom.Parsed category reply)
+            (match reply
+              (Reply.OkConsumed value cursor)
+                (ReaderStep.init
+                  (leaf (ReaderNodeKind.Atom value) begin &cursor)
+                  cursor)
+              (Reply.OkEmpty value cursor)
+                (ReaderStep.init
+                  (leaf (ReaderNodeKind.Atom value) begin &cursor)
+                  cursor)
+              (Reply.ErrConsumed error)
+                (recover-atom source length begin issues &category true error)
+              (Reply.ErrEmpty error)
+                (recover-atom source length begin issues &category false error))))))
+
+  (doc read-syntax "reads complete, incomplete, or invalid source without
+discarding source syntax or executing reader macros. Strict parse uses this
+same tree and rejects it if any issue remains.")
+  (defn read-syntax [source]
+    (let-do [length (String.length source)
+             cursor (Cursor.init 0 1 1)
+             nodes (the (Array (Box ReaderNode)) [])
+             issues (the (Array ReaderIssue) [])
+             parents (the (Array Char) [])]
+      (while-do (Int.< @(Cursor.pos &cursor) length)
+        (let-do [step (read-node source length &cursor &parents &issues)]
+          (Array.push-back! &nodes (Box.init @(ReaderStep.node &step)))
+          (set! cursor @(ReaderStep.cursor &step))))
+      (ReaderDocument.init (String.copy source) nodes issues)))
+
+  (private lower-node)
+  (hidden lower-node)
+  (register lower-node (Fn [(Ref ReaderNode)] (Maybe Located)))
+
+  (private lower-nodes)
+  (hidden lower-nodes)
+  (defn lower-nodes [nodes]
+    (let-do [forms (the (Array (Box Located)) [])]
+      (for [i 0 (Array.length nodes)]
+        (match (lower-node (Box.peek (Array.unsafe-nth nodes i)))
+          (Maybe.Just located) (Array.push-back! &forms (Box.init located))
+          (Maybe.Nothing) ()))
+      forms))
+
+  (defn lower-node [node]
+    (let [kind (ReaderNode.kind node)
+          children (ReaderNode.children node)
+          value (match-ref kind
+            (ReaderNodeKind.Atom form) (Maybe.Just (Form.copy form))
+            (ReaderNodeKind.Group group)
+              (let [forms (lower-nodes children)]
+                (Maybe.Just
+                  (match-ref group
+                    (ReaderGroup.List) (Form.Lst forms)
+                    (ReaderGroup.Array) (Form.Arr forms)
+                    (ReaderGroup.StaticArray) (Form.StaticArr forms)
+                    (ReaderGroup.Dictionary) (Form.Dict forms))))
+            (ReaderNodeKind.ReaderMacro name)
+              (let [forms (lower-nodes children)]
+                (Maybe.Just
+                  (Form.Lst
+                    [(Box.init
+                       (Located.init (Form.Sym [(String.copy name)])
+                                     (Info.synthetic)
+                                     (Info.synthetic)))
+                     @(Array.unsafe-nth &forms 0)])))
+            _ (the (Maybe Form) (Maybe.Nothing)))]
+      (match value
+        (Maybe.Just form)
+          (Maybe.Just
+            (Located.init form @(ReaderNode.start node) @(ReaderNode.end node)))
+        (Maybe.Nothing) (Maybe.Nothing))))
+
+  (doc parse "strictly reads source using the lossless reader, returning located
+compiler forms only when the complete source is valid. Comments are retained.")
+  (register forms
+    (Fn [(Ref ReaderDocument)] (Result (Array (Box Located)) ParseErr)))
+  (defn parse [source] (forms &(read-syntax source)))
+
+  (doc parse-form
+    "strictly reads exactly one form, including surrounding whitespace.")
+  (defn parse-form [source]
+    (match (parse source)
+      (Result.Error error) (Result.Error error)
+      (Result.Success forms)
+        (cond
+          (Int.= (Array.length &forms) 1)
+            (Result.Success @(Box.peek (Array.unsafe-nth &forms 0)))
+          (Array.empty? &forms)
+            (Result.Error
+              (ParseErr.expected-at
+                &(Cursor.advance-string &(Cursor.init 0 1 1)
+                                        source
+                                        0
+                                        (String.length source))
+                @"a form"))
+          (let [next (Located.info (Box.peek (Array.unsafe-nth &forms 1)))]
+            (Result.Error
+              (ParseErr.expected-at
+                &(Cursor.init @(Info.pos next)
+                              @(Info.line next)
+                              @(Info.col next))
+                @"end of input")))))))
+
+(defmodule Reader
+  (doc node-category
+    "returns a lexical fact for a written leaf, without choosing a color.")
+  (defn node-category [node]
+    (match-ref (ReaderNode.kind node)
+      (ReaderNodeKind.Atom form) (category form)
+      (ReaderNodeKind.Whitespace) (ReaderCategory.Whitespace)
+      (ReaderNodeKind.Punctuation category) (ReaderCategory.copy category)
+      (ReaderNodeKind.Invalid category) (ReaderCategory.copy category)
+      _ (ReaderCategory.Unknown)))
+
+  (doc forms "converts an already-read document to compiler forms. Missing or
+invalid syntax is rejected; recovery never invents compilable source.")
+  (defn forms [document]
+    (if (Array.empty? (ReaderDocument.issues document))
+      (Result.Success (lower-nodes (ReaderDocument.nodes document)))
+      (Result.Error
+        (ParseErr.copy
+          (ReaderIssue.error
+            (Array.unsafe-nth (ReaderDocument.issues document) 0)))))))
+
+(defmodule ReaderDocument
+  (doc status "distinguishes valid input, input needing another form or closing
+delimiter, and invalid input. A definite error takes precedence over missing syntax.")
+  (defn status [document]
+    (let-do [incomplete false
+             invalid false
+             issues (ReaderDocument.issues document)]
+      (for [i 0 (Array.length issues)]
+        (match-ref (ReaderIssue.kind (Array.unsafe-nth issues i))
+          (ReaderIssueKind.Incomplete) (set! incomplete true)
+          (ReaderIssueKind.Invalid) (set! invalid true)))
+      (cond
+        invalid (ReaderStatus.Invalid)
+        incomplete (ReaderStatus.Incomplete)
+        (ReaderStatus.Complete)))))

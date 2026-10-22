@@ -20,8 +20,21 @@
 
 ### Modules
 - [`Form`](./Form.html) is the AST sumtype and its pretty-printer.
-- [`Reader`](./Reader.html) are the `parse` / `parse-form` entry points.")
+- [`Reader`](./Reader.html) provides strict parsing and lossless editing documents.
+- [`ReaderDocument`](./ReaderDocument.html) reports complete, incomplete, or invalid input.
+- [`ReaderNode`](./ReaderNode.html) retains source positions and written syntax.")
 
-(save-docs Form Reader)
+(save-docs Form
+           Reader
+           Info
+           Located
+           ReaderCategory
+           ReaderGroup
+           ReaderNodeKind
+           ReaderNode
+           ReaderIssueKind
+           ReaderStatus
+           ReaderIssue
+           ReaderDocument)
 (defn main []
   (System.system "mv ./docs/carp-reader_index.html ./docs/index.html"))
