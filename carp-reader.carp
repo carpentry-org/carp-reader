@@ -1,4 +1,4 @@
-(load "git@github.com:carpentry-org/parsec@0.6.2")
+(load "git@github.com:carpentry-org/parsec@0.6.3")
 (load "git@github.com:carpentry-org/strbuf@0.3.0")
 
 (doc Info "is the parser-captured source position of a form: byte

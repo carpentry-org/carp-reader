@@ -5,6 +5,10 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-05
+
+- `parsec` dependency bumped to 0.6.3.
+
 ## [0.5.0] - 2026-10-22
 
 - `Reader.read-syntax` returns a lossless `ReaderDocument`, retaining trivia,
