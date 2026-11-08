@@ -24,6 +24,11 @@
       (match-ref (Located.form &l) (Str s) (String.to-bytes s) _ [])
     (Result.Error _) []))
 
+(defn pattern-text [src]
+  (match (Reader.parse-form src)
+    (Result.Success l) (match-ref (Located.form &l) (Pat s) @s _ @"")
+    (Result.Error _) @""))
+
 (defn is-double? [s]
   (let [loc (first-form s)] (match-ref (Located.form &loc) (Dbl _) true _ false)))
 
@@ -399,6 +404,30 @@ b\"")) "string with literal newline stays as literal newline")
     &(str-bytes "\"\\123\"")
     "a longer digit run reads as one character code")
   (assert-equal t &[65b] &(str-bytes "\"\\x41\"") "\\x41 still reads as A")
+  (assert-equal t
+    &[195b 169b]
+    &(str-bytes "r\"é\"")
+    "a raw string keeps the bytes of a non-ASCII character")
+  (assert-equal t
+    "é"
+    &(pattern-text "#\"é\"")
+    "a pattern keeps the bytes of a non-ASCII character")
+  (assert-equal t
+    "a\\\"b"
+    &(pattern-text "#\"a\\\"b\"")
+    "an escaped quote does not end a pattern")
+  (assert-equal t
+    "\\\\"
+    &(pattern-text "#\"\\\\\"")
+    "an escaped backslash does not escape the closing quote")
+  (assert-equal t
+    "[A-Za-z]:\\\\"
+    &(pattern-text "#\"[A-Za-z]:\\\\\"")
+    "a pattern ending in an escaped backslash closes at its last quote")
+  (assert-equal t
+    "\\b/\\"
+    &(pattern-text "#\"\\b/\\\"")
+    "a balance escape takes a backslash as its second delimiter")
 
   (assert-equal t
     0
@@ -426,4 +455,7 @@ b\"")) "string with literal newline stays as literal newline")
     "named control char literal keeps its name")
 
   (assert-true t (parse-error? "(") "unbalanced open paren errors")
-  (assert-true t (parse-error? "\"unterminated") "unterminated string errors"))
+  (assert-true t (parse-error? "\"unterminated") "unterminated string errors")
+  (assert-true t
+    (parse-error? "#\"a\\\"")
+    "a pattern whose last quote is escaped is unterminated"))
