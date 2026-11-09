@@ -428,6 +428,14 @@ b\"")) "string with literal newline stays as literal newline")
     "\\b/\\"
     &(pattern-text "#\"\\b/\\\"")
     "a balance escape takes a backslash as its second delimiter")
+  (assert-equal t
+    "\\bé\\"
+    &(pattern-text "#\"\\bé\\\"")
+    "a balance escape counts its delimiters in characters")
+  (assert-equal t
+    "\\b()\\\""
+    &(pattern-text "#\"\\b()\\\"\"")
+    "a balance escape takes only two delimiters")
 
   (assert-equal t
     0

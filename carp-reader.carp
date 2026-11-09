@@ -852,17 +852,29 @@ do not discard syntax. Conversion to compiler forms requires no issues.")
                 (Reply.ErrConsumed (ParseErr.expected-at &c @"closing quote"))
                 (Reply.OkConsumed (Form.Str (String.from-bytes &bytes)) c))))))))
 
+  (private pattern-delimiter-end)
+  (hidden pattern-delimiter-end)
+  ; one whole UTF-8 character, never the closing quote
+  (defn pattern-delimiter-end [src len pos]
+    (if (or (Int.>= pos len) (Char.= (String.char-at src pos) \"))
+      pos
+      (let-do [end (Int.inc pos)]
+        (while (and (Int.< end len)
+                    (Int.= 128
+                           (Int.bit-and 192
+                                        (Char.to-int (String.char-at src end)))))
+          (set! end (Int.inc end)))
+        end)))
+
   (private pattern-escape-end)
   (hidden pattern-escape-end)
-  ; `\b` takes the next two bytes as delimiters, even a backslash
+  ; `\b` takes the next two characters as delimiters, even a backslash
   (defn pattern-escape-end [src len pos]
-    (let-do [stop (if (Char.= (String.char-at src (Int.inc pos)) \b)
-               (Int.min len (Int.+ pos 4))
-               (Int.+ pos 2))
-             end (Int.+ pos 2)]
-      (while-do (and (Int.< end stop) (not (Char.= (String.char-at src end) \")))
-        (set! end (Int.inc end)))
-      end))
+    (if (Char.= (String.char-at src (Int.inc pos)) \b)
+      (pattern-delimiter-end src
+                             len
+                             (pattern-delimiter-end src len (Int.+ pos 2)))
+      (Int.+ pos 2)))
 
   (private pattern-)
   (hidden pattern-)
