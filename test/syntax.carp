@@ -99,6 +99,8 @@ r\"a\"\"b\" #\"[x]\" \\u1234 %@x))")
     "open groups are incomplete") (assert-true test
     (incomplete? "\"unfinished\\")
     "string ending in an escape is incomplete") (assert-true test
+    (incomplete? "#\"unfinished\\\"")
+    "pattern ending in an escaped quote is incomplete") (assert-true test
     (incomplete? "%@")
     "reader prefix needs an operand") (assert-true test
     (invalid? "(]")

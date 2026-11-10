@@ -5,6 +5,12 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Patterns and raw strings keep non-ASCII text byte for byte: `#"é"` and
+  `r"é"` no longer read back with each byte re-encoded as a character. A
+  backslash in a pattern escapes the next character and stays in the
+  pattern's text, so `#"a\"b"` reads as one pattern, as the compiler reads
+  it, instead of ending at the escaped quote.
+
 ## [0.5.1] - 2026-11-05
 
 - `parsec` dependency bumped to 0.6.3.
